@@ -78,3 +78,12 @@
 (defun list-indices ()
   (query (:select [name tbl-name sql]
 		  :from sqlite-master :where (:= type "index"))))
+
+(defun list-attributes (table)
+  (query (:pragma (:table-info @table))))
+
+(defun attribute-name (attribute-list)
+  (second attribute-list))
+
+(defun attribute-type (attribute-list)
+  (third attribute-list))

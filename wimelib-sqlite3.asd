@@ -3,12 +3,13 @@
 (asdf:defsystem #:wimelib-sqlite3
   :serial t
   :description "Describe wimelib-sqlite3 here"
-  :author "Your Name <your.name@example.com>"
+  :author "Wilfried Meindl <wilfried.meindl@gmail.com>"
   :license "Specify license here"
   :depends-on (#:alexandria
                #:cffi
-	       #:wimelib-sql-sqlite)
+	       #:wimelib-sql)
   :components ((:file "package")
-               (:file "wimelib-sqlite3-ffi")
-	       (:file "wimelib-sqlite3")))
+               (:file "ffi")
+	       (:file "sqlite3")
+	       (:file "sql")))
 
