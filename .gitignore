@@ -2,3 +2,5 @@
 *.asd~
 .DS_Store
 *.db
+
+README.md~
