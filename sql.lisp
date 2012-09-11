@@ -23,42 +23,42 @@
     (raw-string processor " <= ")
     (process-sql processor right)))
 
-(add-sql-op :alter)
+(define-sql-op :alter)
 
-(add-sql-op :analyze)
+(define-sql-op :analyze)
 
-(add-sql-op :attach)
+(define-sql-op :attach)
 
-(add-sql-op :begin)
+(define-sql-op :begin)
 
-(add-sql-op :commit)
+(define-sql-op :commit)
 
-(add-sql-op :create)
+(define-sql-op :create)
 
-(add-sql-op :delete)
+(define-sql-op :delete)
 
-(add-sql-op :detach)
+(define-sql-op :detach)
 
-(add-sql-op :drop)
+(define-sql-op :drop)
 
-(add-sql-op :end)
+(define-sql-op :end)
 
-(add-sql-op :explain)
+(define-sql-op :explain)
 
-(add-sql-op :insert)
+(define-sql-op :insert)
 
-(add-sql-op :pragma)
+(define-sql-op :pragma)
 
-(add-sql-op :reindex)
+(define-sql-op :reindex)
 
-(add-sql-op :release)
+(define-sql-op :release)
 
-(add-sql-op :rollback)
+(define-sql-op :rollback)
 
-(add-sql-op :savepoint)
+(define-sql-op :savepoint)
 
-(add-sql-op :select)
+(define-sql-op :select)
 
-(add-sql-op :update)
+(define-sql-op :update)
 
-(add-sql-op :vacuum)
+(define-sql-op :vacuum)

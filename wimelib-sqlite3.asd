@@ -10,6 +10,6 @@
 	       #:wimelib-sql)
   :components ((:file "package")
                (:file "ffi")
-	       (:file "sqlite3")
-	       (:file "sql")))
+	       (:file "sql")
+	       (:file "sqlite3")))
 
