@@ -10,6 +10,10 @@
   `(with-output-to-string (*sql-output*)
      (sql ,sexp)))
 
+(defun ssql* (sexp)
+  (with-output-to-string (*sql-output*)
+    (sql* sexp)))
+
 (defun open-db (name)
   (setf *db* (wimelib-sqlite3:sqlite3-open name)))
 
@@ -39,7 +43,7 @@
     *db* (ssql ,sexp)
     (lambda (,stmt) ,@body)))
 
-(defmacro query (sexp)
+(defmacro query (sexp &key flatp)
   (let ((stmt (gensym "STMT")))
     `(let ((result nil))
        (do-rows ,stmt ,sexp
@@ -47,8 +51,11 @@
 	   (push (wimelib-sqlite3:sqlite3-column-names ,stmt) result))
 	 (push (column-values ,stmt) result))
        (let ((res (nreverse result)))
-	 (values (cdr res)
-	       (car res))))))
+	 (values
+	  ,(if flatp
+	       `(mapcan #'identity (cdr res))
+	       `(cdr res))
+	  (car res))))))
 
 (defun begin-transaction ()
   (exec (:begin :transaction)))
@@ -87,3 +94,23 @@
 
 (defun attribute-type (attribute-list)
   (third attribute-list))
+
+
+;;; Test
+
+(defun test* ()
+  (ssql* `(:and
+	   ,@(loop
+		for table in '(thistime nexttime sometime never)
+		for count from 42
+		collect `(:between (:dot ,table bar) (:* hip hop) ,count)
+		collect `(:like (:dot ,table baz) ,(symbol-name table))))))
+
+(defmacro test ()
+  (let ((sexp `(:and
+		,@(loop
+		     for table in '(thistime nexttime sometime never)
+		     for count from 42
+		     collect `(:between (:dot ,table bar) (:* hip hop) ,count)
+		     collect `(:like (:dot ,table baz) ,(symbol-name table))))))
+    `(ssql ,sexp)))

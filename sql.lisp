@@ -1,27 +1,63 @@
 (in-package #:wimelib-sql)
 
-(define-special-op :l (processor args)
-  (raw-string processor "(")
-  (intersperse processor ", " args)
-  (raw-string processor ")"))
+(defmacro in-parentheses (processor &body body)
+  `(progn
+     (raw-string ,processor "(")
+     ,@body
+     (raw-string ,processor ")")))
+
+;; Arithmetic operators
+
+(define-special-op :+ (processor args)
+  (in-parentheses processor
+    (intersperse processor " + " args)))
+
+(define-special-op :- (processor args)
+  (in-parentheses processor
+    (intersperse processor " - " args)))
+
+(define-special-op :* (processor args)
+  (in-parentheses processor
+    (intersperse processor " * " args)))
+
+(define-special-op :/ (processor args)
+  (in-parentheses processor
+    (intersperse processor " / " args)))
 
 (define-special-op := (processor args)
   (destructuring-bind (left right) args
+    (raw-string processor "(")
     (process-sql processor left)
     (raw-string processor " = ")
-    (process-sql processor right)))
+    (process-sql processor right)
+    (raw-string processor ")")))
 
 (define-special-op :like (processor args)
   (destructuring-bind (left right) args
+    (raw-string processor "(")
     (process-sql processor left)
-    (raw-string processor " like ")
-    (process-sql processor right)))
+    (raw-string processor " LIKE ")
+    (process-sql processor right)
+    (raw-string processor ")")))
 
 (define-special-op :<= (processor args)
   (destructuring-bind (left right) args
+    (raw-string processor "(")
     (process-sql processor left)
     (raw-string processor " <= ")
-    (process-sql processor right)))
+    (process-sql processor right)
+    (raw-string processor ")")))
+
+(define-special-op :between (processor args)
+  (destructuring-bind (var lower upper) args
+    (raw-string processor "(")
+    (intersperse processor " " (list var :between lower :and upper))
+    (raw-string processor ")")))
+
+(define-special-op :and (processor args)
+  (raw-string processor "(")
+  (intersperse processor " AND " args)
+  (raw-string processor ")"))
 
 (define-sql-op :alter)
 
