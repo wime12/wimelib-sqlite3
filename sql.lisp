@@ -48,6 +48,12 @@
     (process-sql processor right)
     (raw-string processor ")")))
 
+(define-special-op :set (processor args)
+  (raw-string processor "SET ")
+  (intersperse processor ", " args
+	       :key (lambda (processor pair)
+		      (intersperse processor " = " pair))))
+
 (define-special-op :between (processor args)
   (destructuring-bind (var lower upper) args
     (raw-string processor "(")

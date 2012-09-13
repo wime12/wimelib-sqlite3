@@ -17,6 +17,9 @@
 (defun open-db (name)
   (setf *db* (wimelib-sqlite3:sqlite3-open name)))
 
+(defun close-db (&optional (db *db*))
+  (sqlite3-close db))
+
 (defun column-value (stmt index)
   (ecase (wimelib-sqlite3:sqlite3-column-type stmt index)
     ((#.wimelib-sqlite3:+sqlite3-integer+)
