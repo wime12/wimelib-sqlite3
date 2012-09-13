@@ -8,11 +8,11 @@
 
 (defmacro ssql (sexp)
   `(with-output-to-string (*sql-output*)
-     (sql ,sexp)))
+     ,(process-sql (get-sql-compiler) sexp)))
 
 (defun ssql* (sexp)
   (with-output-to-string (*sql-output*)
-    (sql* sexp)))
+    (process-sql (get-sql-interpreter) sexp)))
 
 (defun open-db (name)
   (setf *db* (wimelib-sqlite3:sqlite3-open name)))
