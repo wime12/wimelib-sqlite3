@@ -7,12 +7,13 @@
 (defvar *db*)
 
 (defmacro ssql (sexp)
-  `(with-output-to-string (*sql-output*)
-     ,(process-sql (get-sql-compiler) sexp)))
+  `(let ((*sql-interpreter* (make-instance 'sqlite3-interpreter)))
+     (with-output-to-string (*sql-output*)
+       ,(compile-sql (get-sql-compiler) sexp))))
 
 (defun ssql* (sexp)
   (with-output-to-string (*sql-output*)
-    (process-sql (get-sql-interpreter) sexp)))
+    (interprete-sql (get-sql-interpreter) sexp)))
 
 (defun open-db (name)
   (setf *db* (wimelib-sqlite3:sqlite3-open name)))

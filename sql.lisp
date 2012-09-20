@@ -1,4 +1,4 @@
-(in-package #:wimelib-sql)
+(in-package #:wimelib-sqlite3)
 
 (defmacro in-parentheses (processor &body body)
   `(progn
@@ -8,23 +8,35 @@
 
 ;; Arithmetic operators
 
-(define-special-op :+ (processor args)
+(defclass sqlite3-processor (sql-processor) ())
+
+(defclass sqlite3-interpreter (sqlite3-processor sql-interpreter-mixin) ())
+
+(defclass sqlite3-compiler (sqlite3-processor sql-compiler-mixin) ())
+
+(defun get-sql-interpreter ()
+  (or *sql-interpreter* (make-instance 'sqlite3-interpreter)))
+
+(defun get-sql-compiler ()
+  (or *sql-compiler* (make-instance 'sqlite3-compiler)))
+
+(define-special-op :+ ((processor sqlite3-processor) args)
   (in-parentheses processor
     (intersperse processor " + " args)))
 
-(define-special-op :- (processor args)
+(define-special-op :- ((processor sqlite3-processor) args)
   (in-parentheses processor
     (intersperse processor " - " args)))
 
-(define-special-op :* (processor args)
+(define-special-op :* ((processor sqlite3-processor) args)
   (in-parentheses processor
     (intersperse processor " * " args)))
 
-(define-special-op :/ (processor args)
+(define-special-op :/ ((processor sqlite3-processor) args)
   (in-parentheses processor
     (intersperse processor " / " args)))
 
-(define-special-op := (processor args)
+(define-special-op := ((processor sqlite3-processor) args)
   (destructuring-bind (left right) args
     (raw-string processor "(")
     (process-sql processor left)
@@ -32,7 +44,7 @@
     (process-sql processor right)
     (raw-string processor ")")))
 
-(define-special-op :like (processor args)
+(define-special-op :like ((processor sqlite3-processor) args)
   (destructuring-bind (left right) args
     (raw-string processor "(")
     (process-sql processor left)
@@ -40,7 +52,7 @@
     (process-sql processor right)
     (raw-string processor ")")))
 
-(define-special-op :<= (processor args)
+(define-special-op :<= ((processor sqlite3-processor) args)
   (destructuring-bind (left right) args
     (raw-string processor "(")
     (process-sql processor left)
@@ -48,59 +60,59 @@
     (process-sql processor right)
     (raw-string processor ")")))
 
-(define-special-op :set (processor args)
+(define-special-op :set ((processor sqlite3-processor) args)
   (raw-string processor "SET ")
   (intersperse processor ", " args
 	       :key (lambda (processor pair)
 		      (intersperse processor " = " pair))))
 
-(define-special-op :between (processor args)
+(define-special-op :between ((processor sqlite3-processor) args)
   (destructuring-bind (var lower upper) args
     (raw-string processor "(")
     (intersperse processor " " (list var :between lower :and upper))
     (raw-string processor ")")))
 
-(define-special-op :and (processor args)
+(define-special-op :and ((processor sqlite3-processor) args)
   (raw-string processor "(")
   (intersperse processor " AND " args)
   (raw-string processor ")"))
 
-(define-sql-op :alter)
+(define-sql-op sqlite3-processor :alter)
 
-(define-sql-op :analyze)
+(define-sql-op sqlite3-processor :analyze)
 
-(define-sql-op :attach)
+(define-sql-op sqlite3-processor :attach)
 
-(define-sql-op :begin)
+(define-sql-op sqlite3-processor :begin)
 
-(define-sql-op :commit)
+(define-sql-op sqlite3-processor :commit)
 
-(define-sql-op :create)
+(define-sql-op sqlite3-processor :create)
 
-(define-sql-op :delete)
+(define-sql-op sqlite3-processor :delete)
 
-(define-sql-op :detach)
+(define-sql-op sqlite3-processor :detach)
 
-(define-sql-op :drop)
+(define-sql-op sqlite3-processor :drop)
 
-(define-sql-op :end)
+(define-sql-op sqlite3-processor :end)
 
-(define-sql-op :explain)
+(define-sql-op sqlite3-processor :explain)
 
-(define-sql-op :insert)
+(define-sql-op sqlite3-processor :insert)
 
-(define-sql-op :pragma)
+(define-sql-op sqlite3-processor :pragma)
 
-(define-sql-op :reindex)
+(define-sql-op sqlite3-processor :reindex)
 
-(define-sql-op :release)
+(define-sql-op sqlite3-processor :release)
 
-(define-sql-op :rollback)
+(define-sql-op sqlite3-processor :rollback)
 
-(define-sql-op :savepoint)
+(define-sql-op sqlite3-processor :savepoint)
 
-(define-sql-op :select)
+(define-sql-op sqlite3-processor :select)
 
-(define-sql-op :update)
+(define-sql-op sqlite3-processor :update)
 
-(define-sql-op :vacuum)
+(define-sql-op sqlite3-processor :vacuum)
