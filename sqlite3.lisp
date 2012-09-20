@@ -7,9 +7,11 @@
 (defvar *db*)
 
 (defmacro ssql (sexp)
-  `(let ((*sql-interpreter* (make-instance 'sqlite3-interpreter)))
-     (with-output-to-string (*sql-output*)
-       ,(compile-sql (get-sql-compiler) sexp))))
+  (multiple-value-bind (code embed-p) (compile-sql (get-sql-compiler) sexp)
+    (let ((code `(with-output-to-string (*sql-output*) ,code)))
+      (if embed-p
+	  `(let ((*sql-interpreter* (make-instance 'sqlite3-interpreter))) ,code)
+	  code))))
 
 (defun ssql* (sexp)
   (with-output-to-string (*sql-output*)
