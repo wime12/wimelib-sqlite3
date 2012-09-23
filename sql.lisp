@@ -6,13 +6,6 @@
      ,@body
      (raw-string ,processor ")")))
 
-#+nil(defmacro unary-op (processor op-string args)
-  (let ((arg (gensym)))
-    `(destructuring-bind (,arg) ,args
-       (in-parentheses ,processor
-	 (raw-string ,processor ,op-string)
-	 (process-sql ,processor ,arg)))))
-
 (defmacro binary-op (processor op-string args)
   (let ((left (gensym))
 	(right (gensym)))

@@ -100,7 +100,7 @@
       id))
 
 (defun table-exists-p (table)
-  (not (not (member (identifier table)
+  (not (not (member (sql-identifier table)
 		    (list-tables) :test #'equalp))))
 
 (defun list-indices ()
