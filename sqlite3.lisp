@@ -88,19 +88,39 @@
 	  (query (:select name
 		       :from sqlite-master :where (:= type "table")))))
 
+(defun sql-identifier (id)
+  (if (symbolp id)
+      (let ((*sql-identifier-quote* nil))
+	(ssql* id))
+      id))
+
+(defun sql-symbol (id)
+  (if (stringp id)
+      (intern (string-upcase (substitute #\- #\_ id)))
+      id))
+
+(defun table-exists-p (table)
+  (not (not (member (identifier table)
+		    (list-tables) :test #'equalp))))
+
 (defun list-indices ()
   (query (:select [name tbl-name sql]
 		  :from sqlite-master :where (:= type "index"))))
 
-(defun list-attributes (table)
+(defun attribute-list (table)
   (query (:pragma (:table-info @table))))
+
+(defun list-attributes (table)
+  (mapcar #'attribute-name (attribute-list table)))
 
 (defun attribute-name (attribute-list)
   (second attribute-list))
 
-(defun attribute-type (attribute-list)
-  (third attribute-list))
-
+(defun attribute-type (attribute table)
+  (third (find (sql-identifier attribute)
+	       (attribute-list table)
+	       :key #'attribute-name
+	       :test #'equalp)))
 
 ;;; Test
 

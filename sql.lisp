@@ -6,6 +6,22 @@
      ,@body
      (raw-string ,processor ")")))
 
+#+nil(defmacro unary-op (processor op-string args)
+  (let ((arg (gensym)))
+    `(destructuring-bind (,arg) ,args
+       (in-parentheses ,processor
+	 (raw-string ,processor ,op-string)
+	 (process-sql ,processor ,arg)))))
+
+(defmacro binary-op (processor op-string args)
+  (let ((left (gensym))
+	(right (gensym)))
+    `(destructuring-bind (,left ,right) ,args
+       (in-parentheses ,processor
+	 (process-sql ,processor ,left)
+	 (raw-string ,processor ,op-string)
+	 (process-sql ,processor ,right)))))
+
 ;; Arithmetic operators
 
 (defclass sqlite3-processor (sql-processor) ())
@@ -37,28 +53,16 @@
     (intersperse processor " / " args)))
 
 (define-special-op := ((processor sqlite3-processor) args)
-  (destructuring-bind (left right) args
-    (raw-string processor "(")
-    (process-sql processor left)
-    (raw-string processor " = ")
-    (process-sql processor right)
-    (raw-string processor ")")))
+  (binary-op processor " = " args))
 
 (define-special-op :like ((processor sqlite3-processor) args)
-  (destructuring-bind (left right) args
-    (raw-string processor "(")
-    (process-sql processor left)
-    (raw-string processor " LIKE ")
-    (process-sql processor right)
-    (raw-string processor ")")))
+  (binary-op processor " LIKE " args))
 
 (define-special-op :<= ((processor sqlite3-processor) args)
-  (destructuring-bind (left right) args
-    (raw-string processor "(")
-    (process-sql processor left)
-    (raw-string processor " <= ")
-    (process-sql processor right)
-    (raw-string processor ")")))
+  (binary-op processor " <= " args))
+
+(define-special-op :>= ((processor sqlite3-processor) args)
+  (binary-op processor " >= " args))
 
 (define-special-op :set ((processor sqlite3-processor) args)
   (raw-string processor "SET ")
