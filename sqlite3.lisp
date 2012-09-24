@@ -1,5 +1,7 @@
 (in-package #:wimelib-sqlite3)
 
+(declaim (optimize (debug 3)))
+
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (enable-embed-reader-syntax)
   (enable-column-reader-syntax))
@@ -38,16 +40,31 @@
 
 (defun column-values (stmt)
   (loop
-     for i from 0 below (wimelib-sqlite3:sqlite3-data-count stmt)
+     for i from 0 below (sqlite3-data-count stmt)
      collect (column-value stmt i)))
 
 (defmacro exec (sexp)
-  `(wimelib-sqlite3:sqlite3-exec *db* (ssql ,sexp)))
+  `(sqlite3-exec *db* (ssql ,sexp)))
 
 (defmacro do-rows (stmt sexp &body body)
-  `(wimelib-sqlite3:sqlite3-exec
+  `(sqlite3-exec
     *db* (ssql ,sexp)
     (lambda (,stmt) ,@body)))
+
+(defmacro do-query ((&rest columns) sexp &body body)
+  (let ((stmt (gensym)))
+    `(do-rows ,stmt ,sexp
+       (multiple-value-bind ,columns
+	   (values-list (sqlite3-row-values ,stmt))
+	 ,@body))))
+
+(defmacro map-query (sequence-type fun sexp)
+  (let ((stmt (gensym))
+	(result (gensym)))
+    `(let ((,result nil))
+       (do-rows ,stmt ,sexp
+	 (push (funcall ,fun (column-values ,stmt)) ,result))
+       (coerce (nreverse ,result) ,sequence-type))))
 
 (defmacro query (sexp &key flatp)
   (let ((stmt (gensym "STMT")))
@@ -91,7 +108,8 @@
 (defun sql-identifier (id)
   (if (symbolp id)
       (let ((*sql-identifier-quote* nil))
-	(ssql* id))
+	(with-output-to-string (*sql-output*)
+	  (process-sql (get-sql-interpreter) id)))
       id))
 
 (defun sql-symbol (id)
@@ -121,22 +139,3 @@
 	       (attribute-list table)
 	       :key #'attribute-name
 	       :test #'equalp)))
-
-;;; Test
-
-(defun test* ()
-  (ssql* `(:and
-	   ,@(loop
-		for table in '(thistime nexttime sometime never)
-		for count from 42
-		collect `(:between (:dot ,table bar) (:* hip hop) ,count)
-		collect `(:like (:dot ,table baz) ,(symbol-name table))))))
-
-(defmacro test ()
-  (let ((sexp `(:and
-		,@(loop
-		     for table in '(thistime nexttime sometime never)
-		     for count from 42
-		     collect `(:between (:dot ,table bar) (:* hip hop) ,count)
-		     collect `(:like (:dot ,table baz) ,(symbol-name table))))))
-    `(ssql ,sexp)))

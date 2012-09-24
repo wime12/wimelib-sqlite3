@@ -2,7 +2,7 @@
 
 (in-package #:wimelib-sqlite3)
 
-(declaim (optimize speed))
+(declaim (optimize (debug 3)))
 
 ;;; Library
 
