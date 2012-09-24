@@ -31,7 +31,7 @@
   (exec (:insert :into species-list (local-name) :values ("Aardvark")))
   (exec (:create :table foo ((bar :integer)))))
 
-#+(exec (:drop :table foo))
+#+nil(exec (:drop :table foo))
 
 (begin-transaction)
 
