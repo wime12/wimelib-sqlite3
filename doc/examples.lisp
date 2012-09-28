@@ -32,6 +32,7 @@
   (exec (:create :table foo ((bar :integer)))))
 
 #+nil(exec (:drop :table foo))
+#+nil(end-transaction)
 
 (begin-transaction)
 

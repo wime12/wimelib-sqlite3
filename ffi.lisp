@@ -141,7 +141,7 @@
 (defun sqlite3-close (db)
   (check-sqlite3-error (%sqlite3-close db) db))
 
-(defcfun (%sqlite3-prepare "sqlite3_prepare")
+(defcfun (%sqlite3-prepare "sqlite3_prepare_v2")
     sqlite3-result-code
   (db (:pointer sqlite3))
   (sql string-utf8)

@@ -74,6 +74,12 @@
   (intersperse processor " AND " args)
   (raw-string processor ")"))
 
+(define-special-op :bind ((processor sqlite3-processor) args)
+  (destructuring-bind (id) args
+    (raw-string processor "$")
+    (let ((*sql-identifier-quote* nil))
+      (process-sql processor id))))
+
 (define-sql-op sqlite3-processor :alter)
 
 (define-sql-op sqlite3-processor :analyze)
@@ -113,3 +119,12 @@
 (define-sql-op sqlite3-processor :update)
 
 (define-sql-op sqlite3-processor :vacuum)
+
+(defun enable-bind-reader-syntax ()
+  (set-macro-character #\$
+    (lambda (stream char)
+      (declare (ignorable char))
+      (list :bind (read stream)))))
+
+(defun disable-bind-reader-syntax ()
+  (set-macro-character #\$ nil))

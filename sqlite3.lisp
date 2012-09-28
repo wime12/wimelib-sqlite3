@@ -8,6 +8,8 @@
 
 (defvar *db*)
 
+;; SQL generation
+
 (defmacro ssql (sexp)
   (multiple-value-bind (code embed-p) (compile-sql (get-sql-compiler) sexp)
     (let ((code `(with-output-to-string (*sql-output*) ,code)))
@@ -19,11 +21,15 @@
   (with-output-to-string (*sql-output*)
     (interprete-sql (get-sql-interpreter) sexp)))
 
+;; Open and close a database
+
 (defun open-db (name)
   (setf *db* (wimelib-sqlite3:sqlite3-open name)))
 
 (defun close-db (&optional (db *db*))
   (sqlite3-close db))
+
+;; Queries
 
 (defun column-value (stmt index)
   (ecase (wimelib-sqlite3:sqlite3-column-type stmt index)
@@ -80,14 +86,24 @@
 	       `(cdr res))
 	  (car res))))))
 
+;; Transactions and savepoints
+
 (defun begin-transaction ()
   (exec (:begin :transaction)))
 
-(defun end-transaction ()
-  (exec (:end :transaction)))
+(defun commit-transaction ()
+  (exec (:commit :transaction)))
 
-(defun rollback ()
-  (exec (:rollback)))
+(defun savepoint (savepoint)
+  (exec (:savepoint @savepoint)))
+
+(defun release-savepoint (savepoint)
+  (exec (:release :savepoint @savepoint)))
+
+(defun rollback (&optional savepoint)
+  (if savepoint
+      (exec (:rollback :to @savepoint))
+      (exec (:rollback))))
 
 (defmacro with-transaction (&body body)
   `(progn
@@ -96,9 +112,22 @@
        (rollback ()
 	 :report "Undo all changes and end the transaction."
 	 (rollback))
-       (end-transaction ()
+       (commit-transaction ()
 	 :report "End the transaction and keep all changes"
 	 (end-transaction)))))
+
+(defmacro with-savepoint ((savepoint) &body body)
+  `(progn
+     (savepoint ,savepoint)
+     (restart-case (progn ,@body (release-savepoint ,savepoint))
+       (rollback ()
+	 :report "Undo all changes and end the transaction."
+	 (rollback ,savepoint))
+       (release-savepoint ()
+	 :report "Release the savepoint keeping all changes"
+	 (release-savepoint ,savepoint)))))
+
+;; Database introspection
 
 (defun list-tables ()
   (mapcar #'car
@@ -139,3 +168,36 @@
 	       (attribute-list table)
 	       :key #'attribute-name
 	       :test #'equalp)))
+
+;; Prepared queries
+
+(defmacro prepared-aux (name sexp)
+  `(let ((stmt (sqlite3-prepare *db* (ssql ,sexp))))
+     (,@name
+      (fun &rest args)
+       (do ((i 1 (1+ i))
+	    (args args (cdr args)))
+	   ((null args))
+	 (bind-parameter stmt i (car args)))
+       (do ((result (sqlite3-step stmt) (sqlite3-step stmt)))
+	   ((= result +sqlite3-done+))
+	 (when (and fun (= result +sqlite3-row+))
+	   (funcall fun stmt)))
+       (sqlite3-reset stmt)
+       (sqlite3-clear-bindings stmt))))
+
+(defmacro defprepared (name sexp)
+  `(prepared-aux (defun ,name) ,sexp))
+
+(defmacro prepare (sexp)
+  `(prepared-aux (lambda) ,sexp))
+
+(defgeneric bind-parameter (stmt i arg)
+  (:method (stmt i (arg integer))
+    (sqlite3-bind-integer stmt i arg))
+  (:method (stmt i (arg string))
+    (sqlite3-bind-text stmt i arg))
+  (:method (stmt i (arg float))
+    (sqlite3-bind-float stmt i arg))
+  (:method (stmt i (arg null))
+    (sqlite3-bind-null stmt i)))

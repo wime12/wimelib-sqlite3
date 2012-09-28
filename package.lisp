@@ -68,5 +68,30 @@
    sqlite3-exec
    sqlite3-row-values
    sqlite3-column-names
-   sqlite3-dump-table))
+   sqlite3-dump-table
+   ;; the official interface
+   ssql
+   ssql*
+   open-db
+   close-db
+   column-value
+   column-values
+   exec
+   do-rows
+   do-query
+   map-query
+   query
+   begin-transaction
+   commit-transaction
+   rollback
+   with-transaction
+   list-tables
+   table-exists-p
+   list-indices
+   attribute-list
+   attribute-type
+   prepare
+   enable-bind-reader-syntax
+   disable-bind-reader-syntax
+   ))
 
