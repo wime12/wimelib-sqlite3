@@ -171,20 +171,28 @@
 
 ;; Prepared queries
 
+(defvar *prepared-queries* (make-hash-table :weak :value))
+
+(defun call-prepared (stmt fun args)
+  (do ((i 1 (1+ i))
+       (args args (cdr args)))
+      ((null args))
+    (bind-parameter stmt i (car args)))
+  (do ((result (sqlite3-step stmt) (sqlite3-step stmt)))
+      ((= result +sqlite3-done+))
+    (when (and fun (= result +sqlite3-row+))
+      (funcall fun stmt)))
+  (sqlite3-reset stmt)
+  (sqlite3-clear-bindings stmt))
+
 (defmacro prepared-aux (name sexp)
-  `(let ((stmt (sqlite3-prepare *db* (ssql ,sexp))))
+  `(let ((stmt-id (gensym)))
      (,@name
       (fun &rest args)
-       (do ((i 1 (1+ i))
-	    (args args (cdr args)))
-	   ((null args))
-	 (bind-parameter stmt i (car args)))
-       (do ((result (sqlite3-step stmt) (sqlite3-step stmt)))
-	   ((= result +sqlite3-done+))
-	 (when (and fun (= result +sqlite3-row+))
-	   (funcall fun stmt)))
-       (sqlite3-reset stmt)
-       (sqlite3-clear-bindings stmt))))
+      (let ((stmt (or (gethash stmt-id *prepared-queries*)
+		      (setf (gethash stmt-id *prepared-queries*)
+			    (sqlite3-prepare *db* (ssql ,sexp))))))
+	(call-prepared stmt fun args)))))
 
 (defmacro defprepared (name sexp)
   `(prepared-aux (defun ,name) ,sexp))
