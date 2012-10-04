@@ -7,9 +7,14 @@
   :license "Specify license here"
   :depends-on (#:alexandria
                #:cffi
+	       #:closer-mop
 	       #:wimelib-sql)
   :components ((:file "package")
                (:file "ffi")
 	       (:file "sql")
 	       (:file "sqlite3")))
 
+(defpackage #:wimelib-sqlite3-config (:export #:*base-directory*))
+
+(defparameter wimelib-sqlite3-config:*base-directory*
+  (make-pathname :name nil :type nil :defaults *load-truename*))
