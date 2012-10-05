@@ -25,10 +25,20 @@
 ;; Open and close a database
 
 (defun open-db (name)
-  (setf *db* (wimelib-sqlite3:sqlite3-open (namestring name))))
+  (wimelib-sqlite3:sqlite3-open (namestring name)))
 
-(defun close-db (&optional (db *db*))
+(defun close-db (db)
   (sqlite3-close db))
+
+(defmacro with-db ((db) &body body)
+  `(let ((*db* ,db))
+     ,@body))
+
+(defmacro with-open-db ((name) &body body)
+  `(let ((*db* (open-db ,name)))
+     (unwind-protect
+	  (progn ,@body)
+       (close-db *db*))))
 
 ;; Queries
 
@@ -223,17 +233,8 @@
 
 ;; DAO
 
-#+nil(defclass species-list ()
-  ((local-name :coltype :text :initarg :local-name :accessor local-name)
-   (scientific-name :coltype :text :initarg :scientific-name :accessor scientific-name)
-   (species-id :coltype :integer :primary-key t))
-  (:metaclass dao-class))
-
-
 (defclass da-class (standard-class)
-  (#+nil(columns :reader da-class-columns :initarg :columns)
-	#+nil(primary-keys :reader da-class-primary-keys :initarg :primary-keys)
-	#+nil(not-null-columns :reader da-class-not-null-columns :initarg :not-null-columns))
+  ()
   (:documentation "Metaclass for database access objects."))
 
 (defmethod validate-superclass ((class da-class) (super-class standard-class))
@@ -274,23 +275,13 @@
   (declare (ignorable slot-name))
   (let ((slotd (call-next-method)))
     (with-slots (column-type not-null primary-key) slotd
-      (setf column-type (some #'da-column-type direct-slot-definitions))
-      (setf primary-key (some #'da-primary-key direct-slot-definitions))
-      (setf not-null (some #'da-not-null direct-slot-definitions)))
+      (let ((ct (some #'da-column-type direct-slot-definitions))
+	    (pk (some #'da-primary-key direct-slot-definitions))
+	    (nn (some #'da-not-null direct-slot-definitions)))
+	(setf column-type (or ct (not (null pk)) (not (null nn))))
+	(setf primary-key pk)
+	(setf not-null nn)))
     slotd))
-
-#+nil(defmethod initialize-instance :after ((class da-class) &rest all-keys)
-  (declare (ignorable all-keys))
-  (setf (slot-value class 'columns)
-	(mapcar #'slot-definition-name (class-slots class)))
-  (setf (slot-value class 'primary-keys)
-	(mapcar #'slot-definition-name
-		(remove-if-not #'da-primary-key (class-slots class))))
-  (setf (slot-value class 'not-null-columns)
-	(mapcar #'slot-definition-name
-		(remove-if-not #'(lambda (sd)
-				   (or (da-primary-key sd) (da-not-null sd)))
-			       (class-slots class)))))
 
 (defgeneric da-schema (class-designator)
   (:method ((class-designator da-class))
@@ -299,12 +290,14 @@
 			  (mapcar #'column-definition-from-slot-definition
 				  (class-slots class-designator)))))
   (:method ((class-designator symbol))
-    (get-schema (find-class class-designator))))
+    (da-schema (find-class class-designator))))
 
 (defun column-definition-from-slot-definition (slot-definition)
   (when (da-column-type slot-definition)
     `(,(slot-definition-name slot-definition)
-       ,(da-column-type slot-definition)
+       ,@(let ((column-type (da-column-type slot-definition)))
+	      (cond ((eql column-type t) nil)
+		    (t (list column-type))))
        ,@(cond ((da-primary-key slot-definition) '(:primary :key))
 	       ((da-not-null slot-definition) '(:not :null))))))
 
@@ -314,7 +307,9 @@
 
 (defgeneric delete-da (da))
 
-(defgeneric get-da (class-name &rest args &key &allow-other-keys))
+(defgeneric get-da (class-name &key &allow-other-keys))
+
+(defgeneric get-all-das (class-name))
 
 (defun analyze-slot-definition (slot-definition)
   (destructuring-bind (slot-name &key column-type primary-key not-null
@@ -370,10 +365,10 @@
 			  :where (:and ,@(mapcar (lambda (cname)
 						   `(:= ,cname (:embed ,cname)))
 						 primary-keys))))))
-       (defmethod get-da ((da-class (eql ,class-name))
+       (defmethod get-da ((da-class (eql ',class-name))
 			  &key ,@primary-keys)
 	 (let ((data (car
-		      (exec (:select (:columns ,@all)
+		      (query (:select (:columns ,@all)
 				     :from ,class-name
 				     :where (:and ,@(mapcar (lambda (cname)
 							      `(:= ,cname (:embed ,cname)))
@@ -383,4 +378,27 @@
 	     ,@(mapcar (lambda (cname)
 			 `(setf (slot-value new-da ',cname) ,cname))
 		       all))
-	   new-da)))))
+	   new-da))
+       (defmethod get-all-das ((da-class (eql ',class-name)))
+	 (let ((result nil))
+	   (do-rows stmt (:select (:columns ,@all)
+				  :from ,class-name)
+	     (destructuring-bind ,all (column-values stmt)
+	       (let ((new-da (make-instance ',class-name)))
+		 ,@(mapcar (lambda (cname)
+			     `(setf (slot-value new-da ',cname) ,cname))
+			   all)
+		 (push new-da result))))
+	   (nreverse result))))))
+
+;;; Test
+
+#+nil(define-da-class tree-data ()
+       ((plot-id :column-type t :accessor plot-id)
+	(tree-tag-number :column-type t :primary-key t :accessor tree-tag-number)
+	(species-id :column-type t :accessor species-id)
+	(dbh :column-type t :accessor dbh)
+	(height :column-type t :accessor height)
+	(researcher :column-type t :accessor researcher)
+	(date :column-type t :accessor date)
+	(notes :column-type t :accessor notes)))
