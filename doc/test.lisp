@@ -1,8 +1,10 @@
 (in-package #:wimelib-sqlite3)
 
+(defvar *a* "/Users/wilfried/amazonia.db")
+
 (defclass tree-data ()
   ((plot-id :column-type t :accessor plot-id :initarg :plot-id)
-   (tree-tag-number :column-type t :primary-key t :reader tree-tag-number
+   (tree-tag-number :primary-key t :reader tree-tag-number
 		    :initarg :tree-tag-number)
    (species-id :column-type t :accessor species-id
 	       :initarg :species-id)
