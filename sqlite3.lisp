@@ -226,7 +226,7 @@
 (defun print-row (stmt)
   (print (column-values stmt)))
 
-(defun prepared-result (prepared-stmt &rest args)
+(defun prepared-results (prepared-stmt &rest args)
   (let ((result nil))
     (apply prepared-stmt (lambda (stmt)
 			   (push (column-values stmt) result))
@@ -236,7 +236,7 @@
 ;; DAO
 
 (defclass da-class (standard-class)
-  ()
+  ((:table-name :initarg :table-name :initform nil :accessor da-class-table-name))
   (:documentation "Metaclass for database access objects."))
 
 (defmethod validate-superclass ((class da-class) (super-class standard-class))
@@ -306,6 +306,15 @@
 (defun not-null-slots (da-class)
   (remove-if-not #'da-not-null (class-slots da-class)))
 
+(defgeneric primary-keys (da-or-da-class)
+  (:method ((da-name symbol))
+    (primary-keys (find-class da-name)))
+  (:method ((da-class da-class))
+    (mapcar #'slot-definition-name (primary-key-slots da-class)))
+  (:method (da)
+    (mapcar #'(lambda (key-name) (cons key-name (slot-value da key-name)))
+	    (primary-keys (class-of da)))))
+
 (defmethod finalize-inheritance :after ((class da-class))
   (funcall (compile nil `(lambda () ,@(make-defmethod-exps class)))))
 
@@ -343,12 +352,12 @@
 	  (finalize-inheritance class))
       (apply #'get-da class-name args))))
 
-(defgeneric get-all-das (class-name)
+(defgeneric all-das (class-name)
   (:method ((class-name symbol))
     (let ((class (find-class class-name)))
       (unless (class-finalized-p class)
 	(finalize-inheritance class)))
-    (funcall #'get-all-das class-name)))
+    (funcall #'all-das class-name)))
 
 (defun make-defmethod-exps (class)
   (let ((class-name (class-name class))
@@ -357,7 +366,7 @@
 	(primary-keys (mapcar #'column-name (primary-key-slots class))))
     (when all-columns
       (list* (make-insert-da-exp class table-name all-columns)
-	     (make-get-all-das-exp class-name table-name all-columns)
+	     (make-all-das-exp class-name table-name all-columns)
 	     (when primary-keys
 	       (list
 		(make-update-record-exp class table-name all-columns primary-keys)
@@ -434,11 +443,11 @@
 		     all-columns))
 	 ,new-da))))
 
-(defun make-get-all-das-exp (class-name table-name all-columns)
+(defun make-all-das-exp (class-name table-name all-columns)
   (let ((result (make-symbol "RESULT"))
 	(stmt (make-symbol "STMT"))
 	(new-da (make-symbol "NEW-DA")))
-    `(defmethod get-all-das ((da-class (eql ',class-name)))
+    `(defmethod all-das ((da-class (eql ',class-name)))
        (let ((,result nil))
 	 (do-rows ,stmt (:select (:columns ,@all-columns)
 				:from ,table-name)

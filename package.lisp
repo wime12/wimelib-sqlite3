@@ -80,6 +80,8 @@
    ssql*
    open-db
    close-db
+   with-db
+   with-open-db
    column-value
    column-values
    exec
@@ -89,15 +91,29 @@
    query
    begin-transaction
    commit-transaction
+   savepoint
+   release-savepoint
    rollback
    with-transaction
+   with-savepoint
    list-tables
    table-exists-p
    list-indices
    attribute-list
+   attribute-name
    attribute-type
+   defprepared
    prepare
+   prepared-results
    enable-bind-reader-syntax
    disable-bind-reader-syntax
+   da-class
+   table-name
+   insert-da
+   update-record
+   refresh-da
+   delete-da
+   get-da
+   all-das
    ))
 
