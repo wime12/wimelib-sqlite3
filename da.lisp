@@ -3,10 +3,10 @@
 (define-condition da-error (error)
   ((da :reader da-error-da)))
 
-(define-condition da-does-not-exist (da-error)
+(define-condition da-does-not-exist-error (da-error)
   ())
 
-(define-condition da-exists-already (da-error)
+(define-condition da-exists-error (da-error)
   ())
 
 (defclass da-class (standard-class)
@@ -243,3 +243,5 @@
   (when all-columns
     `(setf ,@(mapcan (lambda (column) `((slot-value ,da ',column) ,column))
 		     all-columns))))
+
+;; TODO: Inheritance
