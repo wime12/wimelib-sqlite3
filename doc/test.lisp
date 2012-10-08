@@ -1,6 +1,7 @@
 (in-package #:wimelib-sqlite3)
 
-(defvar *a* "/Users/wilfried/amazonia.db")
+(defparameter *a* (merge-pathnames "doc/amazonia.db"
+				   wimelib-sqlite3-config:*BASE-DIRECTORY*))
 
 (defclass tree-data ()
   ((plot-id :column-type t :accessor plot-id :initarg :plot-id)
@@ -71,7 +72,7 @@
 	 :initarg :notes))
   (:metaclass da-class))
 
-(defvar *tree*
+(defparameter *tree*
   (make-instance 'tree-data
 		 :tree-tag-number 20000
 		 :notes ""
