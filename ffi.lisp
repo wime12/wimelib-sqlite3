@@ -302,7 +302,7 @@
   (stmt (:pointer sqlite3-stmt)))
 
 (defun sqlite3-finalize (stmt)
-  (check-sqlite3-error (%sqlite3-finalize stmt)))
+  (%sqlite3-finalize stmt))
 
 (defun sqlite3-do-rows (stmt &optional fun)
   (do ((result (sqlite3-step stmt) (sqlite3-step stmt)))

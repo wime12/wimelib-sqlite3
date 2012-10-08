@@ -128,3 +128,14 @@
 
 (defun disable-bind-reader-syntax ()
   (set-macro-character #\$ nil))
+
+(defmacro ssql (sexp)
+  (multiple-value-bind (code embed-p) (compile-sql (get-sql-compiler) sexp)
+    (let ((code `(with-output-to-string (*sql-output*) ,code)))
+      (if embed-p
+	  `(let ((*sql-interpreter* (make-instance 'sqlite3-interpreter))) ,code)
+	  code))))
+
+(defun ssql* (sexp)
+  (with-output-to-string (*sql-output*)
+    (interprete-sql (get-sql-interpreter) sexp)))

@@ -12,7 +12,13 @@
   :components ((:file "package")
                (:file "ffi")
 	       (:file "sql")
-	       (:file "sqlite3")))
+	       (:file "sqlite3")
+	       (:file "database")
+	       (:file "query")
+	       (:file "transaction")
+	       (:file "introspection")
+	       (:file "prepared")
+	       (:file "da")))
 
 (defpackage #:wimelib-sqlite3-config (:export #:*base-directory*))
 
