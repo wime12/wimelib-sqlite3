@@ -16,9 +16,6 @@
 (defmethod validate-superclass ((class da-class) (super-class standard-class))
   t)
 
-(defun table-name (da-class)
-  (class-name da-class))
-
 (defgeneric da-column-type (slot-definition)
   (:method (sd)
     (declare (ignorable sd))
@@ -46,9 +43,6 @@
    (column-type :initform nil :initarg :column-type :reader da-column-type)
    (primary-key :initform nil :initarg :primary-key :reader da-primary-key)
    (not-null :initform nil :initarg :not-null :reader da-not-null)))
-
-(defun column-name (slot-definition)
-  (or (da-column-name slot-definition) (slot-definition-name slot-definition)))
 
 (defmethod direct-slot-definition-class ((class da-class) &rest initargs)
   (declare (ignore initargs))
@@ -93,12 +87,30 @@
     (ensure-class-finalized da-name)
     (primary-keys (find-class da-name)))
   (:method ((da-class da-class))
-    (mapcar #'slot-definition-name (primary-key-slots da-class)))
+    (mapcar #'da-column-name (primary-key-slots da-class)))
   (:method (da)
     (mapcar #'(lambda (key-name) (cons key-name (slot-value da key-name)))
 	    (primary-keys (class-of da)))))
 
+(defgeneric persistent-columns (da-or-da-class)
+  (:method ((da-name symbol))
+    (ensure-class-finalized da-name)
+    (persistent-columns (find-class da-name)))
+  (:method ((da-class da-class))
+    (mapcar #'da-column-name (persistent-slots da-class)))
+  (:method (da)
+    (mapcar #'(lambda (column-name) (cons column-name (slot-value da column-name)))
+	    (persistent-columns (class-of da)))))
+
 (defmethod finalize-inheritance :after ((class da-class))
+  (if (slot-value class 'table-name)
+      (destructuring-bind (table-name) (slot-value class 'table-name)
+	(setf (slot-value class 'table-name) table-name))
+      (setf (slot-value class 'table-name) (class-name class)))
+  (dolist (pslot (persistent-slots class))
+    (when (null (slot-value pslot 'column-name))
+      (setf (slot-value pslot 'column-name)
+	    (slot-definition-name pslot))))
   (funcall (compile nil `(lambda () ,@(make-defmethod-exps class)))))
 
 (defgeneric da-schema (class-designator)
@@ -119,13 +131,13 @@
        ,@(cond ((da-primary-key slot-definition) '(:primary :key))
 	       ((da-not-null slot-definition) '(:not :null))))))
 
-(defgeneric insert-da (da))
+(defgeneric insert-da (da &optional deep))
 
-(defgeneric update-record (da))
+(defgeneric update-record (da &optional deep))
 
 (defgeneric refresh-da (da))
 
-(defgeneric delete-da (da))
+(defgeneric delete-da (da &optional deep))
 
 (defgeneric get-da (class-name &rest args &key &allow-other-keys)
   (:method ((class-name symbol) &rest args &key &allow-other-keys)
@@ -140,9 +152,11 @@
 
 (defun make-defmethod-exps (class)
   (let ((class-name (class-name class))
-	(table-name (table-name class))
-	(all-columns (mapcar #'column-name (persistent-slots class)))
-	(primary-keys (mapcar #'column-name (primary-key-slots class))))
+	(da-class-precedence-list (remove-if-not (lambda (c) (typep c 'da-class))
+						 (class-precedence-list class)))
+	(table-name (da-class-table-name class))
+	(all-columns (mapcar #'da-column-name (persistent-slots class)))
+	(primary-keys (mapcar #'da-column-name (primary-key-slots class))))
     (when all-columns
       (list* (make-insert-da-exp class table-name all-columns)
 	     (make-select-das-exp class-name table-name all-columns)
@@ -155,20 +169,22 @@
 
 (defun make-insert-da-exp (class-name table-name all-columns)
   (let ((da (make-symbol "DA")))
-    `(defmethod insert-da ((,da ,class-name))
+    `(defmethod insert-da ((,da ,class-name) &optional deep)
        (with-slots ,all-columns ,da
 	 (exec (:insert :into ,table-name ,all-columns
 			:values ,(mapcar (lambda (cname)
 					   `(:embed ,cname))
-					 all-columns)))))))
+					 all-columns))))
+       (when deep (call-next-method)))))
 
 (defun make-update-record-exp (class-name table-name all-columns primary-keys)
   (let ((da (make-symbol "DA")))
-    `(defmethod update-record ((,da ,class-name))
+    `(defmethod update-record ((,da ,class-name) &optional deep)
        (with-slots ,all-columns ,da
 	 (exec (:update ,table-name
 			:set (:columns ,@(make-assign-values-exp all-columns))
-			:where ,(where-exps primary-keys)))))))
+			:where ,(where-exps primary-keys))))
+       (when deep (call-next-method)))))
 
 (defun make-assign-values-exp (columns)
   (mapcar (lambda (cname)
@@ -193,17 +209,18 @@
 
 (defun make-delete-da-exp (class-name table-name primary-keys)
   (let ((da (make-symbol "DA")))
-    `(defmethod delete-da ((,da ,class-name))
+    `(defmethod delete-da ((,da ,class-name) &optional deep)
        (with-slots ,primary-keys ,da
 	 (exec (:delete :from ,table-name
-			:where ,(where-exps primary-keys)))))))
+			:where ,(where-exps primary-keys))))
+       (when deep (call-next-method)))))
 
 (defun make-get-da-exp (class-name table-name all-columns primary-keys)
   (let ((data (make-symbol "DATA"))
 	(new-da (make-symbol "NEW-DA")))
     `(defmethod get-da ((da-class (eql ',class-name)) &key ,@primary-keys)
-       (assert (and ,@primary-keys) (,@primary-keys)
-	       "Values for all primary keys must be provided.")
+       (assert (and ,@primary-keys) ,primary-keys
+	       "Values for all primary keys must be provided: ~A" ',primary-keys)
        (let ((,data (car
 		     (query
 		      (:select (:columns ,@all-columns)
@@ -214,6 +231,27 @@
 	     (destructuring-bind ,all-columns ,data
 	       ,(make-set-slots-exp new-da all-columns))
 	     ,new-da))))))
+
+#+nil(defun make-joined-query-exp-single (class-precedence-list all-columns
+				     primary-keys)
+  (if (not (cdr class-precedence-list))
+      `(:select (:columns ,@all-columns)
+		:from ,table-name
+		:where ,(where-exps primary-keys))
+      `(:select (:columns ,@(make-joined-query-columns class-precedence-list))
+		:join )))
+
+;; (:select (:columns (:dot table1 c1) (:dot table1 c2)
+;;     (:dot table2 c3
+
+#+nil(defun column-list (class exclude)
+  (let ((direct-superclasses (class-direct-superclasses class))
+	(column-names (column-names class))
+	(class-name (class-name class)))
+    (append (mapcar (lambda (c) `(:dot class-name c))
+		    (set-difference column-names exclude))
+	    (mapcan (lambda (class) (column-list class
+						 ))))))
 
 (defun where-exp (column)
   `(:= ,column (:embed ,column)))

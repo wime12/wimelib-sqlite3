@@ -19,7 +19,8 @@
 	 :initarg :date)
    (notes :column-type t :accessor notes
 	  :initarg :notes))
-  (:metaclass da-class))
+  (:metaclass da-class)
+  (:table-name |tree-data|))
 
 (defclass plot-description ()
   ((sample-area-number :column-type t
