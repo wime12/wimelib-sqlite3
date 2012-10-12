@@ -13,6 +13,14 @@
   ((table-name :initarg :table-name :initform nil :accessor da-class-table-name))
   (:documentation "Metaclass for database access objects."))
 
+(defgeneric da-class-table-name (da-class)
+  (:method ((class da-class))
+    (or (car (slot-value class 'table-name)) (class-name class))))
+
+(defgeneric (setf da-class-table-name) (da-class new-value)
+  (:method ((class da-class) new-value)
+    (setf (slot-value class 'table-name) (list new-value))))
+
 (defmethod validate-superclass ((class da-class) (super-class standard-class))
   t)
 
@@ -286,3 +294,30 @@
 		     all-columns))))
 
 ;; TODO: Inheritance
+
+(defun find-first-persistent-slot-class (slot-name reversed-cpl)
+  (find-if (lambda (c) (contains-persistent-slot-p slot-name c))
+	   reversed-cpl))
+
+(defun contains-persistent-slot-p (slot-name class)
+  (let ((slotd (find slot-name (class-direct-slots class)
+		     :key #'slot-definition-name)))
+    (when slotd
+      (persistent-slot-p slotd))))
+
+(defun persistent-slot-p (slotd)
+  (or (da-slot-column-type slotd)
+      (da-slot-primary-key slotd)
+      (da-slot-not-null slotd)))
+
+(defun slots-table-names (persistent-slots reversed-cpl)
+  (let ((slot-names (mapcar #'slot-definition-name persistent-slots)))
+    (values
+     (mapcar (lambda (slot-name)
+	       (da-class-table-name (find-first-persistent-slot-class
+				     slot-name reversed-cpl)))
+	     slot-names)
+     slot-names)))
+
+(defun da-class-slot-tables (class)
+  (slots-table-names (persistent-slots class) (reverse (class-precedence-list class))))

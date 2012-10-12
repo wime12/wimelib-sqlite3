@@ -83,3 +83,19 @@
 		 :dbh 5.4
 		 :species-id 100
 		 :plot-id 2))
+
+(defclass a ()
+  ((a-a :column-type t)
+   (a-b :column-type t)
+   (a-c :primary-key t))
+  (:metaclass da-class))
+
+(defclass b ()
+  ((b-a :column-type t)
+   (a-b)
+   (b-c :primary-key t))
+  (:metaclass da-class)
+  (:table-name b-test))
+
+(defclass c (a b) ()
+  (:metaclass da-class))
