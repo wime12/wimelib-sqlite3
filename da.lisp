@@ -10,49 +10,39 @@
   ())
 
 (defclass da-class (standard-class)
-  ((table-name :initarg :table-name :initform nil))
+  ((table-name :initarg :table-name :initform nil :accessor da-class-table-name))
   (:documentation "Metaclass for database access objects."))
-
-(defgeneric da-class-table-name (da-class))
-
-(defmethod da-class-table-name ((class da-class))
-  (or (car (slot-value class 'table-name)) (class-name class)))
-
-(defgeneric (setf da-class-table-name) (da-class table-name))
-
-(defmethod (setf da-class-table-name) ((class da-class) table-name)
-  (setf (slot-value class 'table-name) (list table-name)))
 
 (defmethod validate-superclass ((class da-class) (super-class standard-class))
   t)
 
-(defgeneric da-slot-column-type (slot-definition)
+(defgeneric da-column-type (slot-definition)
   (:method (sd)
     (declare (ignorable sd))
     nil))
 
-(defgeneric da-slot-primary-key (slot-definition)
+(defgeneric da-primary-key (slot-definition)
   (:method (sd)
     (declare (ignorable sd))
     nil))
 
-(defgeneric da-slot-not-null (slot-definition)
+(defgeneric da-not-null (slot-definition)
   (:method (sd)
     (declare (ignorable sd))
     nil))
 
 (defclass da-standard-direct-slot-definition (standard-direct-slot-definition)
-  ((column-name :initform nil :initarg :column-name :reader da-slot-column-name)
-   (column-type :initform nil :initarg :column-type :reader da-slot-column-type)
-   (primary-key :initform nil :initarg :primary-key :reader da-slot-primary-key)
-   (not-null :initform nil :initarg :not-null :reader da-slot-not-null)))
+  ((column-name :initform nil :initarg :column-name :reader da-column-name)
+   (column-type :initform nil :initarg :column-type :reader da-column-type)
+   (primary-key :initform nil :initarg :primary-key :reader da-primary-key)
+   (not-null :initform nil :initarg :not-null :reader da-not-null)))
 
 (defclass da-standard-effective-slot-definition
     (standard-effective-slot-definition)
-  ((column-name :initform nil :initarg :column-name :reader da-slot-column-name)
-   (column-type :initform nil :initarg :column-type :reader da-slot-column-type)
-   (primary-key :initform nil :initarg :primary-key :reader da-slot-primary-key)
-   (not-null :initform nil :initarg :not-null :reader da-slot-not-null)))
+  ((column-name :initform nil :initarg :column-name :reader da-column-name)
+   (column-type :initform nil :initarg :column-type :reader da-column-type)
+   (primary-key :initform nil :initarg :primary-key :reader da-primary-key)
+   (not-null :initform nil :initarg :not-null :reader da-not-null)))
 
 (defmethod direct-slot-definition-class ((class da-class) &rest initargs)
   (declare (ignore initargs))
@@ -67,22 +57,22 @@
   (declare (ignorable slot-name))
   (let ((slotd (call-next-method)))
     (with-slots (column-type not-null primary-key) slotd
-      (let ((ct (some #'da-slot-column-type direct-slot-definitions))
-	    (pk (some #'da-slot-primary-key direct-slot-definitions))
-	    (nn (some #'da-slot-not-null direct-slot-definitions)))
+      (let ((ct (some #'da-column-type direct-slot-definitions))
+	    (pk (some #'da-primary-key direct-slot-definitions))
+	    (nn (some #'da-not-null direct-slot-definitions)))
 	(setf column-type (or ct pk nn))
 	(setf primary-key pk)
 	(setf not-null (or pk nn))))
     slotd))
 
 (defun persistent-slots (da-class)
-  (remove-if-not #'da-slot-column-type (class-slots da-class)))
+  (remove-if-not #'da-column-type (class-slots da-class)))
 
 (defun primary-key-slots (da-class)
-  (remove-if-not #'da-slot-primary-key (class-slots da-class)))
+  (remove-if-not #'da-primary-key (class-slots da-class)))
 
 (defun not-null-slots (da-class)
-  (remove-if-not #'da-slot-not-null (class-slots da-class)))
+  (remove-if-not #'da-not-null (class-slots da-class)))
 
 (defgeneric ensure-class-finalized (class-designator)
   (:method ((class-name symbol))
@@ -97,7 +87,7 @@
     (ensure-class-finalized da-name)
     (primary-keys (find-class da-name)))
   (:method ((da-class da-class))
-    (mapcar #'da-slot-column-name (primary-key-slots da-class)))
+    (mapcar #'da-column-name (primary-key-slots da-class)))
   (:method (da)
     (mapcar #'(lambda (key-name) (cons key-name (slot-value da key-name)))
 	    (primary-keys (class-of da)))))
@@ -107,16 +97,20 @@
     (ensure-class-finalized da-name)
     (persistent-columns (find-class da-name)))
   (:method ((da-class da-class))
-    (mapcar #'da-slot-column-name (persistent-slots da-class)))
+    (mapcar #'da-column-name (persistent-slots da-class)))
   (:method (da)
     (mapcar #'(lambda (column-name) (cons column-name (slot-value da column-name)))
 	    (persistent-columns (class-of da)))))
 
 (defmethod finalize-inheritance :after ((class da-class))
-  (declare (optimize debug))
-  (with-slots (table-name) class
-    (when (null table-name)
-      (setf (slot-value class 'table-name) (list (class-name class)))))
+  (if (slot-value class 'table-name)
+      (destructuring-bind (table-name) (slot-value class 'table-name)
+	(setf (slot-value class 'table-name) table-name))
+      (setf (slot-value class 'table-name) (class-name class)))
+  (dolist (pslot (persistent-slots class))
+    (when (null (slot-value pslot 'column-name))
+      (setf (slot-value pslot 'column-name)
+	    (slot-definition-name pslot))))
   (funcall (compile nil `(lambda () ,@(make-defmethod-exps class)))))
 
 (defgeneric da-schema (class-designator)
@@ -129,13 +123,13 @@
     (da-schema (find-class class-designator))))
 
 (defun column-definition-from-slot-definition (slot-definition)
-  (when (da-slot-column-type slot-definition)
+  (when (da-column-type slot-definition)
     `(,(slot-definition-name slot-definition)
-       ,@(let ((column-type (da-slot-column-type slot-definition)))
+       ,@(let ((column-type (da-column-type slot-definition)))
 	      (cond ((eql column-type t) nil)
 		    (t (list column-type))))
-       ,@(cond ((da-slot-primary-key slot-definition) '(:primary :key))
-	       ((da-slot-not-null slot-definition) '(:not :null))))))
+       ,@(cond ((da-primary-key slot-definition) '(:primary :key))
+	       ((da-not-null slot-definition) '(:not :null))))))
 
 (defgeneric insert-da (da &optional deep))
 
@@ -157,11 +151,12 @@
     (funcall #'select-das class-name :where where)))
 
 (defun make-defmethod-exps (class)
-  (declare (optimize (debug 3)))
   (let ((class-name (class-name class))
+	(da-class-precedence-list (remove-if-not (lambda (c) (typep c 'da-class))
+						 (class-precedence-list class)))
 	(table-name (da-class-table-name class))
-	(all-columns (mapcar #'da-slot-column-name (persistent-slots class)))
-	(primary-keys (mapcar #'da-slot-column-name (primary-key-slots class))))
+	(all-columns (mapcar #'da-column-name (persistent-slots class)))
+	(primary-keys (mapcar #'da-column-name (primary-key-slots class))))
     (when all-columns
       (list* (make-insert-da-exp class table-name all-columns)
 	     (make-select-das-exp class-name table-name all-columns)
@@ -236,43 +231,6 @@
 	     (destructuring-bind ,all-columns ,data
 	       ,(make-set-slots-exp new-da all-columns))
 	     ,new-da))))))
-
-#+nil(defun make-column-names (da-class)
-  (declare (optimize debug))
-  (let ((da-class-class (find-class 'da-class)))
-    (let ((da-class-precedence-list
-	   (remove-if-not (lambda (c) (typep c da-class-class))
-			  (class-precedence-list da-class))))
-      (labels ((iter (class-list dotted-names column-names)
-		 (if (null class-list)
-		     (values dotted-names column-names)
-		     (let* ((current-class (car class-list))
-			    (table-name (da-class-table-name current-class))
-			    (columns (mapcar #'da-slot-column-name
-					    (persistent-slots current-class)))
-			    (remaining-columns
-			     (set-difference columns column-names)))
-		       (break)
-		       (iter (cdr class-list)
-			     (append
-			      (make-dotted-names table-name remaining-columns)
-			      dotted-names)
-			     (append remaining-columns column-names))))))
-	(iter (nreverse da-class-precedence-list) nil nil)))))
-
-(defun make-dotted-names (table-name column-names)
-  (mapcar #'(lambda (cname) `(:dot ,table-name ,cname)) column-names))
-
-;;; Normalized das
-
-(defun first-persistent-slot-class (slot-name reversed-cpl)
-  (find-if (lambda (c) (contains-persistent-slot-p slot-name c))
-	   reversed-cpl))
-
-(defun contains-persistent-slot-p (slot-name class)
-  (persistent-slot-p (find slot-name (class-direct-slots class)
-			   :key #'slot-definition-name)))
-
 
 #+nil(defun make-joined-query-exp-single (class-precedence-list all-columns
 				     primary-keys)
