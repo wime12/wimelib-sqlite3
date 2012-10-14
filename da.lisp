@@ -13,6 +13,48 @@
   ((table-name :initarg :table-name :initform nil :accessor da-class-table-name))
   (:documentation "Metaclass for database access objects."))
 
+(defmethod validate-superclass ((class da-class) (super-class standard-class))
+  t)
+
+(defclass da-object ()
+  ()
+  (:metaclass da-class))
+
+(defmethod print-object ((da da-object) stream)
+  (print-unreadable-object (da stream :type t :identity t)
+    (primary-keys da)
+    (format stream "~{~{:~A ~A~}~^ ~}"
+	    (mapcar (lambda (p) `(,(car p) ,(cdr p)))
+		    (primary-keys da)))))
+
+(defmethod initialize-instance :around
+    ((class da-class) &rest initargs &key direct-superclasses)
+  (declare (dynamic-extent initargs))
+  (let ((da-object-class (find-class 'da-object)))
+    (if (some #'(lambda (c) (subtypep c da-object-class)) direct-superclasses)
+	(call-next-method)
+	(apply #'call-next-method
+	       class
+	       :direct-superclasses (append direct-superclasses
+					    (list da-object-class))
+	       initargs))))
+
+(defmethod reinitialize-instance :around
+    ((class da-class)
+     &rest initargs
+     &key (direct-superclasses '() direct-superclasses-p))
+  (declare (dynamic-extent initargs))
+  (if direct-superclasses-p
+      (let ((da-object-class (find-class 'da-object)))
+	(if (some #'(lambda (c) (subtypep c da-object-class)) direct-superclasses)
+	    (call-next-method)
+	    (apply #'call-next-method
+		   class
+		   :direct-superclasses (append direct-superclasses
+						(list da-object-class))
+		   initargs)))
+      (call-next-method)))
+
 (defgeneric da-class-table-name (da-class)
   (:method ((class da-class))
     (or (car (slot-value class 'table-name)) (class-name class))))
@@ -20,9 +62,6 @@
 (defgeneric (setf da-class-table-name) (da-class new-value)
   (:method ((class da-class) new-value)
     (setf (slot-value class 'table-name) (list new-value))))
-
-(defmethod validate-superclass ((class da-class) (super-class standard-class))
-  t)
 
 (defgeneric da-slot-column-type (slot-definition)
   (:method (sd)
@@ -97,9 +136,12 @@
     (primary-keys (find-class da-name)))
   (:method ((da-class da-class))
     (ensure-class-finalized da-class)
-    (slot-column-names (primary-key-slots da-class)))
+    (slot-names (primary-key-slots da-class)))
   (:method (da)
     (map-slot-names-to-values da (primary-keys (class-of da)))))
+
+(defun slot-names (slotds)
+  (mapcar #'slot-definition-name slotds))
 
 (defgeneric persistent-columns (da-or-da-class)
   (:method ((da-name symbol))
@@ -107,7 +149,7 @@
   (:method ((da-class da-class))
     (ensure-class-finalized da-class)
     (slot-column-names (persistent-slots da-class)))
-  (:method (da)
+  (:method ((da da-object))
     (map-slot-names-to-values da (persistent-columns (class-of da)))))
 
 (defgeneric not-null-columns (da-or-da-class)
@@ -116,7 +158,7 @@
   (:method ((da-class da-class))
     (ensure-class-finalized da-class)
     (slot-column-names (not-null-slots da-class)))
-  (:method (da)
+  (:method ((da da-object))
     (map-slot-names-to-values da (not-null-columns (class-of da)))))
 
 (defun slot-column-names (slots)
