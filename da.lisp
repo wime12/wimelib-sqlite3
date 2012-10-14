@@ -92,29 +92,39 @@
 
 (defgeneric primary-keys (da-or-da-class)
   (:method ((da-name symbol))
-    (ensure-class-finalized da-name)
     (primary-keys (find-class da-name)))
   (:method ((da-class da-class))
-    (mapcar #'da-slot-column-name (primary-key-slots da-class)))
+    (ensure-class-finalized da-class)
+    (slot-column-names (primary-key-slots da-class)))
   (:method (da)
-    (mapcar #'(lambda (key-name) (cons key-name (slot-value da key-name)))
-	    (primary-keys (class-of da)))))
+    (map-slot-names-to-values da (primary-keys (class-of da)))))
 
 (defgeneric persistent-columns (da-or-da-class)
   (:method ((da-name symbol))
-    (ensure-class-finalized da-name)
     (persistent-columns (find-class da-name)))
   (:method ((da-class da-class))
-    (mapcar #'da-slot-column-name (persistent-slots da-class)))
+    (ensure-class-finalized da-class)
+    (slot-column-names (persistent-slots da-class)))
   (:method (da)
-    (mapcar #'(lambda (column-name) (cons column-name (slot-value da column-name)))
-	    (persistent-columns (class-of da)))))
+    (map-slot-names-to-values da (persistent-columns (class-of da)))))
+
+(defgeneric not-null-columns (da-or-da-class)
+  (:method ((da-name symbol))
+    (persistent-columns (find-class da-name)))
+  (:method ((da-class da-class))
+    (ensure-class-finalized da-class)
+    (slot-column-names (not-null-slots da-class)))
+  (:method (da)
+    (map-slot-names-to-values da (not-null-columns (class-of da)))))
+
+(defun slot-column-names (slots)
+  (mapcar #'da-slot-column-name slots))
+
+(defun map-slot-names-to-values (da slot-names)
+  (mapcar #'(lambda (slot-name) (cons slot-name (slot-value da slot-name)))
+	  slot-names))
 
 (defmethod finalize-inheritance :after ((class da-class))
-  (if (slot-value class 'table-name)
-      (destructuring-bind (table-name) (slot-value class 'table-name)
-	(setf (slot-value class 'table-name) table-name))
-      (setf (slot-value class 'table-name) (class-name class)))
   (dolist (pslot (persistent-slots class))
     (when (null (slot-value pslot 'column-name))
       (setf (slot-value pslot 'column-name)
@@ -139,13 +149,13 @@
        ,@(cond ((da-slot-primary-key slot-definition) '(:primary :key))
 	       ((da-slot-not-null slot-definition) '(:not :null))))))
 
-(defgeneric insert-da (da &optional deep))
+(defgeneric insert-da (da))
 
-(defgeneric update-record (da &optional deep))
+(defgeneric update-record (da))
 
 (defgeneric refresh-da (da))
 
-(defgeneric delete-da (da &optional deep))
+(defgeneric delete-da (da))
 
 (defgeneric get-da (class-name &rest args &key &allow-other-keys)
   (:method ((class-name symbol) &rest args &key &allow-other-keys)
@@ -160,8 +170,6 @@
 
 (defun make-defmethod-exps (class)
   (let ((class-name (class-name class))
-	(da-class-precedence-list (remove-if-not (lambda (c) (typep c 'da-class))
-						 (class-precedence-list class)))
 	(table-name (da-class-table-name class))
 	(all-columns (mapcar #'da-slot-column-name (persistent-slots class)))
 	(primary-keys (mapcar #'da-slot-column-name (primary-key-slots class))))
@@ -177,22 +185,20 @@
 
 (defun make-insert-da-exp (class-name table-name all-columns)
   (let ((da (make-symbol "DA")))
-    `(defmethod insert-da ((,da ,class-name) &optional deep)
+    `(defmethod insert-da ((,da ,class-name))
        (with-slots ,all-columns ,da
 	 (exec (:insert :into ,table-name ,all-columns
 			:values ,(mapcar (lambda (cname)
 					   `(:embed ,cname))
-					 all-columns))))
-       (when deep (call-next-method)))))
+					 all-columns)))))))
 
 (defun make-update-record-exp (class-name table-name all-columns primary-keys)
   (let ((da (make-symbol "DA")))
-    `(defmethod update-record ((,da ,class-name) &optional deep)
+    `(defmethod update-record ((,da ,class-name))
        (with-slots ,all-columns ,da
 	 (exec (:update ,table-name
 			:set (:columns ,@(make-assign-values-exp all-columns))
-			:where ,(where-exps primary-keys))))
-       (when deep (call-next-method)))))
+			:where ,(where-exps primary-keys)))))))
 
 (defun make-assign-values-exp (columns)
   (mapcar (lambda (cname)
@@ -217,11 +223,10 @@
 
 (defun make-delete-da-exp (class-name table-name primary-keys)
   (let ((da (make-symbol "DA")))
-    `(defmethod delete-da ((,da ,class-name) &optional deep)
+    `(defmethod delete-da ((,da ,class-name))
        (with-slots ,primary-keys ,da
 	 (exec (:delete :from ,table-name
-			:where ,(where-exps primary-keys))))
-       (when deep (call-next-method)))))
+			:where ,(where-exps primary-keys)))))))
 
 (defun make-get-da-exp (class-name table-name all-columns primary-keys)
   (let ((data (make-symbol "DATA"))
@@ -239,27 +244,6 @@
 	     (destructuring-bind ,all-columns ,data
 	       ,(make-set-slots-exp new-da all-columns))
 	     ,new-da))))))
-
-#+nil(defun make-joined-query-exp-single (class-precedence-list all-columns
-				     primary-keys)
-  (if (not (cdr class-precedence-list))
-      `(:select (:columns ,@all-columns)
-		:from ,table-name
-		:where ,(where-exps primary-keys))
-      `(:select (:columns ,@(make-joined-query-columns class-precedence-list))
-		:join )))
-
-;; (:select (:columns (:dot table1 c1) (:dot table1 c2)
-;;     (:dot table2 c3
-
-#+nil(defun column-list (class exclude)
-  (let ((direct-superclasses (class-direct-superclasses class))
-	(column-names (column-names class))
-	(class-name (class-name class)))
-    (append (mapcar (lambda (c) `(:dot class-name c))
-		    (set-difference column-names exclude))
-	    (mapcan (lambda (class) (column-list class
-						 ))))))
 
 (defun where-exp (column)
   `(:= ,column (:embed ,column)))
@@ -293,31 +277,34 @@
     `(setf ,@(mapcan (lambda (column) `((slot-value ,da ',column) ,column))
 		     all-columns))))
 
-;; TODO: Inheritance
+;; ;; TODO: Inheritance
 
-(defun find-first-persistent-slot-class (slot-name reversed-cpl)
-  (find-if (lambda (c) (contains-persistent-slot-p slot-name c))
-	   reversed-cpl))
+;; (defun find-first-persistent-slot-class (slot-name reversed-cpl)
+;;   (find-if (lambda (c) (contains-persistent-slot-p slot-name c))
+;; 	   reversed-cpl))
 
-(defun contains-persistent-slot-p (slot-name class)
-  (let ((slotd (find slot-name (class-direct-slots class)
-		     :key #'slot-definition-name)))
-    (when slotd
-      (persistent-slot-p slotd))))
+;; (defun contains-persistent-slot-p (slot-name class)
+;;   (let ((slotd (find slot-name (class-direct-slots class)
+;; 		     :key #'slot-definition-name)))
+;;     (when slotd
+;;       (persistent-slot-p slotd))))
 
-(defun persistent-slot-p (slotd)
-  (or (da-slot-column-type slotd)
-      (da-slot-primary-key slotd)
-      (da-slot-not-null slotd)))
+;; (defun persistent-slot-p (slotd)
+;;   (or (da-slot-column-type slotd)
+;;       (da-slot-primary-key slotd)
+;;       (da-slot-not-null slotd)))
 
-(defun slots-table-names (persistent-slots reversed-cpl)
-  (let ((slot-names (mapcar #'slot-definition-name persistent-slots)))
-    (values
-     (mapcar (lambda (slot-name)
-	       (da-class-table-name (find-first-persistent-slot-class
-				     slot-name reversed-cpl)))
-	     slot-names)
-     slot-names)))
+;; (defun slots-table-names (persistent-slots cpl)
+;;   (let ((slot-names (mapcar #'slot-definition-name persistent-slots))
+;; 	(column-names (mapcar #'da-slot-column-name persistent-slots)))
+;;     (values
+;;      slot-names
+;;      (mapcar (lambda (slot-name)
+;; 	       (da-class-table-name (find-first-persistent-slot-class
+;; 				     slot-name cpl)))
+;; 	     slot-names)
+;;      column-names)))
 
-(defun da-class-slot-tables (class)
-  (slots-table-names (persistent-slots class) (reverse (class-precedence-list class))))
+;; (defun da-class-slot-tables (class)
+;;   (slots-table-names (persistent-slots class)
+;; 		     (reverse (class-precedence-list class))))
