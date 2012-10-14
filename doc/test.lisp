@@ -4,21 +4,22 @@
 				   wimelib-sqlite3-config:*BASE-DIRECTORY*))
 
 (defclass tree-data ()
-  ((plot-id :column-type t :accessor plot-id :initarg :plot-id)
+  ((plot-id :column-type t :accessor plot-id :initarg :plot-id
+	    :column-name |plot-id|)
    (tree-tag-number :primary-key t :reader tree-tag-number
-		    :initarg :tree-tag-number)
+		    :initarg :tree-tag-number :column-name |tree-tag-number|)
    (species-id :column-type t :accessor species-id
-	       :initarg :species-id)
+	       :initarg :species-id :column-name |species-id|)
    (dbh :column-type t :accessor dbh
-	:initarg :dbh)
+	:initarg :dbh :column-name |dbh|)
    (height :column-type t :accessor height
-	   :initarg :height)
+	   :initarg :height :column-name |height|)
    (researcher :column-type t :accessor researcher
-	       :initarg :researcher)
+	       :initarg :researcher :column-name |researcher|)
    (date :column-type t :accessor date
-	 :initarg :date)
+	 :initarg :date :column-name |date|)
    (notes :column-type t :accessor notes
-	  :initarg :notes))
+	  :initarg :notes :column-name |notes|))
   (:metaclass da-class)
   (:table-name |tree-data|))
 
