@@ -151,7 +151,7 @@
     (primary-keys (find-class da-name)))
   (:method ((da-class da-class))
     (ensure-class-finalized da-class)
-    (slot-names (primary-key-slots da-class)))
+    (da-class-primary-key da-class))
   (:method (da)
     (map-slot-names-to-values da (primary-keys (class-of da)))))
 
