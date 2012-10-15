@@ -86,18 +86,26 @@
 		 :species-id 100
 		 :plot-id 2))
 
-(defclass a ()
-  ((a-a :column-type t)
-   (a-b :column-type t)
-   (a-c :primary-key t))
-  (:metaclass da-class))
+;;; Helpers
 
-(defclass b ()
-  ((b-a :column-type t)
-   (a-b)
-   (b-c :primary-key t))
-  (:metaclass da-class)
-  (:table-name b-test))
+(defmacro with-collector (collector &body body)
+  (let ((collect-head (gensym "HEAD"))
+	(collect-tail (gensym "TAIL"))
+	(x (gensym "X")))
+    `(let* ((,collect-head (list nil))
+	    (,collect-tail ,collect-head))
+       (flet ((,collector (,x)
+		(setf (cdr ,collect-tail)
+		      (setf ,collect-tail (list ,x)))))
+	 ,@body)
+       (cdr ,collect-head))))
 
-(defclass c (a b) ()
-  (:metaclass da-class))
+(defmacro collecting (&body body)
+  `(with-collector collector ,@body))
+
+(defmacro with-collectors ((&rest collectors) &body body)
+  (if collectors
+      `(with-collector ,(car collectors)
+	 (with-collectors ,(cdr collectors)
+	   ,@body))
+      `(progn ,@body)))

@@ -1,5 +1,7 @@
 (in-package #:wimelib-sqlite3)
 
+;; TODO: references
+
 (define-condition da-error (error)
   ((da :reader da-error-da)))
 
@@ -23,10 +25,9 @@
 
 (defmethod print-object ((da da-object) stream)
   (print-unreadable-object (da stream :type t :identity t)
-    (primary-keys da)
     (format stream "~{~{:~A ~A~}~^ ~}"
 	    (mapcar (lambda (p) `(,(car p) ,(cdr p)))
-		    (primary-keys da)))))
+		    (primary-key da)))))
 
 (defmethod initialize-instance :around
     ((class da-class) &rest initargs &key direct-superclasses)
@@ -69,12 +70,12 @@
     (declare (ignorable sd))
     nil))
 
-(defgeneric da-slot-primary-key (slot-definition)
+(defgeneric da-slot-not-null (slot-definition)
   (:method (sd)
     (declare (ignorable sd))
     nil))
 
-(defgeneric da-slot-not-null (slot-definition)
+(defgeneric da-slot-unique (slot-definition)
   (:method (sd)
     (declare (ignorable sd))
     nil))
@@ -133,12 +134,14 @@
   (remove-if-not #'da-slot-column-type (class-slots da-class)))
 
 (defun primary-key-slots (da-class)
-  (remove-if-not #'da-slot-primary-key (class-slots da-class)))
+  (let ((key-names (da-class-primary-key da-class)))
+    (remove-if-not (lambda (sd-name) (member sd-name key-names))
+		   (class-slots da-class) :key #'slot-definition-name)))
 
 (defun not-null-slots (da-class)
   (remove-if-not #'da-slot-not-null (class-slots da-class)))
 
-(defgeneric ensure-class-finalized (class-designator)
+#+nil(defgeneric ensure-class-finalized (class-designator)
   (:method ((class-name symbol))
     (ensure-class-finalized (find-class class-name)))
   (:method ((class standard-class))
@@ -146,14 +149,14 @@
       (finalize-inheritance class)
       t)))
 
-(defgeneric primary-keys (da-or-da-class)
+(defgeneric primary-key (da-or-da-class)
   (:method ((da-name symbol))
-    (primary-keys (find-class da-name)))
+    (primary-key (find-class da-name)))
   (:method ((da-class da-class))
-    (ensure-class-finalized da-class)
+    (ensure-finalized da-class)
     (da-class-primary-key da-class))
   (:method (da)
-    (map-slot-names-to-values da (primary-keys (class-of da)))))
+    (map-slot-names-to-values da (primary-key (class-of da)))))
 
 (defun slot-names (slotds)
   (mapcar #'slot-definition-name slotds))
@@ -162,7 +165,7 @@
   (:method ((da-name symbol))
     (persistent-columns (find-class da-name)))
   (:method ((da-class da-class))
-    (ensure-class-finalized da-class)
+    (ensure-finalized da-class)
     (slot-column-names (persistent-slots da-class)))
   (:method ((da da-object))
     (map-slot-names-to-values da (persistent-columns (class-of da)))))
@@ -171,7 +174,7 @@
   (:method ((da-name symbol))
     (persistent-columns (find-class da-name)))
   (:method ((da-class da-class))
-    (ensure-class-finalized da-class)
+    (ensure-finalized da-class)
     (slot-column-names (not-null-slots da-class)))
   (:method ((da da-object))
     (map-slot-names-to-values da (not-null-columns (class-of da)))))
@@ -184,12 +187,13 @@
 	  slot-names))
 
 (defmethod finalize-inheritance :after ((class da-class))
-  (let ((lonely-primary-key
+  (let ((deserted-primary-key
 	 (set-difference (da-class-primary-key class)
 			 (slot-names (persistent-slots class)))))
-    (when lonely-primary-key
+    (when deserted-primary-key
       (error "Primary key for class ~A: no slot~p ~{~A~^, ~}"
-	     (class-name class) (length lonely-primary-key) lonely-primary-key)))
+	     (class-name class) (length deserted-primary-key)
+	     deserted-primary-key)))
   (funcall (compile nil `(lambda () ,@(make-defmethod-exps class)))))
 
 (defgeneric da-schema (class-designator)
@@ -216,8 +220,6 @@
     (when primary-key
       `((:primary-key ,@primary-key)))))
 
-;; TODO: default values
-
 (defgeneric insert-da (da))
 
 (defgeneric update-record (da))
@@ -228,14 +230,22 @@
 
 (defgeneric get-da (class-name &rest args &key &allow-other-keys)
   (:method ((class-name symbol) &rest args &key &allow-other-keys)
-    (unless (ensure-class-finalized class-name)
-      (error "No primary keys specified for class ~A" class-name))
+    (let ((class (find-class class-name)))
+      (if (class-finalized-p class)
+	  ;; If class was finalized but we get here, then no method
+	  ;; was eql-specialized on the class name during finalize-inheritance,
+	  ;; hence the class does not have primary keys
+	  (error "No primary keys were specified for class ~A" class-name)
+	  (finalize-inheritance class)))
     (apply #'get-da class-name args)))
 
 (defgeneric select-das (class-name &key where)
   (:method ((class-name symbol) &key where)
     (ensure-class-finalized class-name)
     (funcall #'select-das class-name :where where)))
+
+;;; The following functions generate the code for the methods
+;;; which are added during inheritance finalization.
 
 (defun make-defmethod-exps (class)
   (let* ((class-name (class-name class))
@@ -244,26 +254,27 @@
 	 (primary-key-slots (primary-key-slots class))
 	 (all-column-slot-names (mapcar #'slot-definition-name persistent-slots))
 	 (all-columns (mapcar #'da-slot-column-name persistent-slots))
-	 (primary-key-slot-names (mapcar #'slot-definition-name primary-key-slots))
-	 (primary-keys (mapcar #'da-slot-column-name primary-key-slots)))
+	 (primary-key-slot-names (da-class-primary-key class))
+	 (primary-key-column-names
+	  (mapcar #'da-slot-column-name primary-key-slots)))
     (when all-columns
       (list* (make-insert-da-exp class table-name all-column-slot-names
 				 all-columns)
 	     (make-select-das-exp class-name table-name all-column-slot-names
 				  all-columns)
-	     (when primary-keys
+	     (when primary-key-slot-names
 	       (list
 		(make-update-record-exp class table-name
 					all-column-slot-names all-columns
-					primary-key-slot-names primary-keys)
+					primary-key-slot-names primary-key-column-names)
 		(make-refresh-da-exp class table-name
 				     all-column-slot-names all-columns
-				     primary-key-slot-names primary-keys)
+				     primary-key-slot-names primary-key-column-names)
 		(make-delete-da-exp class table-name
-				    primary-key-slot-names primary-keys)
+				    primary-key-slot-names primary-key-column-names)
 		(make-get-da-exp class-name table-name
 				 all-column-slot-names all-columns
-				 primary-key-slot-names primary-keys)))))))
+				 primary-key-slot-names primary-key-column-names)))))))
 
 (defun make-insert-da-exp (class-name table-name all-column-slot-names all-columns)
   (let ((da (make-symbol "DA")))
