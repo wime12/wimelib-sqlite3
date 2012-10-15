@@ -10,7 +10,8 @@
   ())
 
 (defclass da-class (standard-class)
-  ((table-name :initarg :table-name :initform nil :accessor da-class-table-name))
+  ((table-name :initarg :table-name :initform nil)
+   (primary-key :initarg :primary-key :initform nil :accessor da-class-primary-key))
   (:documentation "Metaclass for database access objects."))
 
 (defmethod validate-superclass ((class da-class) (super-class standard-class))
@@ -79,17 +80,17 @@
     nil))
 
 (defclass da-standard-direct-slot-definition (standard-direct-slot-definition)
-  ((column-name :initform nil :initarg :column-name :reader da-slot-column-name)
-   (column-type :initform nil :initarg :column-type :reader da-slot-column-type)
-   (primary-key :initform nil :initarg :primary-key :reader da-slot-primary-key)
-   (not-null :initform nil :initarg :not-null :reader da-slot-not-null)))
+  ((column-name :initarg :column-name :reader da-slot-column-name)
+   (column-type :initarg :column-type :reader da-slot-column-type)
+   (unique :initarg :unique :reader da-slot-unique)
+   (not-null :initarg :not-null :reader da-slot-not-null)))
 
 (defclass da-standard-effective-slot-definition
     (standard-effective-slot-definition)
-  ((column-name :initform nil :initarg :column-name :reader da-slot-column-name)
-   (column-type :initform nil :initarg :column-type :reader da-slot-column-type)
-   (primary-key :initform nil :initarg :primary-key :reader da-slot-primary-key)
-   (not-null :initform nil :initarg :not-null :reader da-slot-not-null)))
+  ((column-name :initarg :column-name :reader da-slot-column-name)
+   (column-type :initarg :column-type :reader da-slot-column-type)
+   (unique :initarg :unique :reader da-slot-unique)
+   (not-null :initarg :not-null :reader da-slot-not-null)))
 
 (defmethod direct-slot-definition-class ((class da-class) &rest initargs)
   (declare (ignore initargs))
@@ -99,19 +100,49 @@
   (declare (ignore initargs))
   (find-class 'da-standard-effective-slot-definition))
 
+#+nil(defmethod compute-effective-slot-definition :around
+    ((class da-class) slot-name direct-slot-definitions)
+  (declare (optimize debug))
+  (let ((slotd (call-next-method)))
+    (with-slots (column-type not-null unique column-name) slotd
+      (let ((ct (some #'da-slot-column-type direct-slot-definitions))
+	    (nn (some #'da-slot-not-null direct-slot-definitions))
+	    (un (some #'da-slot-unique direct-slot-definitions)))
+	(break)
+	(when (or ct nn un)
+	  (setf column-type (or ct t))
+	  (setf not-null (or nn t))
+	  (setf unique (or un t))
+	  (setf column-name
+	      (or (da-slot-column-name (car direct-slot-definitions))
+		  slot-name)))))
+    slotd))
+
 (defmethod compute-effective-slot-definition :around
     ((class da-class) slot-name direct-slot-definitions)
+  (declare (optimize debug))
   (let ((slotd (call-next-method)))
-    (with-slots (column-type not-null primary-key column-name) slotd
-      (let ((ct (some #'da-slot-column-type direct-slot-definitions))
-	    (pk (some #'da-slot-primary-key direct-slot-definitions))
-	    (nn (some #'da-slot-not-null direct-slot-definitions)))
-	(setf column-type (or ct pk nn))
-	(setf primary-key pk)
-	(setf not-null (or pk nn))
-	(setf column-name
-	      (or (da-slot-column-name (car direct-slot-definitions))
-		  slot-name))))
+    (with-slots (column-type not-null unique column-name) slotd
+      (let ((ct-slot (find-if (lambda (sd) (slot-boundp sd 'column-type))
+			      direct-slot-definitions))
+	    (nn-slot (find-if (lambda (sd) (slot-boundp sd 'not-null))
+			      direct-slot-definitions))
+	    (un-slot (find-if (lambda (sd) (slot-boundp sd 'unique))
+			      direct-slot-definitions)))
+	(let ((ct (if ct-slot (slot-value ct-slot 'column-type) t))
+	      (nn (if nn-slot (slot-value nn-slot 'not-null) nil))
+	      (un (if un-slot (slot-value un-slot 'not-null) nil)))
+	  (setf column-type (or ct nn un))
+	  (if column-type
+	      (setf not-null nn
+		    unique un
+		    column-name (or (da-slot-column-name
+				     (car direct-slot-definitions))
+				    (slot-definition-name
+				     (car direct-slot-definitions))))
+	      (setf not-null nil
+		    unique nil
+		    column-name nil)))))
     slotd))
 
 (defun persistent-slots (da-class)
@@ -169,18 +200,21 @@
 	  slot-names))
 
 (defmethod finalize-inheritance :after ((class da-class))
-  #+nil(dolist (pslot (persistent-slots class))
-    (when (null (slot-value pslot 'column-name))
-      (setf (slot-value pslot 'column-name)
-	    (slot-definition-name pslot))))
+  (let ((lonely-primary-key
+	 (set-difference (da-class-primary-key class)
+			 (slot-names (persistent-slots class)))))
+    (when lonely-primary-key
+      (error "Primary key for class ~A: no slot~p ~{~A~^, ~}"
+	     (class-name class) (length lonely-primary-key) lonely-primary-key)))
   (funcall (compile nil `(lambda () ,@(make-defmethod-exps class)))))
 
 (defgeneric da-schema (class-designator)
-  (:method ((class-designator da-class))
-    `(:create :table ,(class-name class-designator)
-	      ,(remove-if #'null
-			  (mapcar #'column-definition-from-slot-definition
-				  (class-slots class-designator)))))
+  (:method ((class da-class))
+    (ensure-finalized class)
+    `(:create :table ,(da-class-table-name class)
+	      ,(nconc (mapcar #'column-definition-from-slot-definition
+		       (persistent-slots class))
+		      (primary-key-declaration class))))
   (:method ((class-designator symbol))
     (da-schema (find-class class-designator))))
 
@@ -190,8 +224,13 @@
        ,@(let ((column-type (da-slot-column-type slot-definition)))
 	      (cond ((eql column-type t) nil)
 		    (t (list column-type))))
-       ,@(cond ((da-slot-primary-key slot-definition) '(:primary :key))
-	       ((da-slot-not-null slot-definition) '(:not :null))))))
+       ,@(when (da-slot-unique slot-definition) '(:unique))
+       ,@(when (da-slot-not-null slot-definition) '(:not :null)))))
+
+(defun primary-key-declaration (class)
+  (let ((primary-key (da-class-primary-key class)))
+    (when primary-key
+      `((:primary-key ,@primary-key)))))
 
 (defgeneric insert-da (da))
 

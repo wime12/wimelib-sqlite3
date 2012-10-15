@@ -80,6 +80,11 @@
     (let ((*sql-identifier-quote* nil))
       (process-sql processor id))))
 
+(define-special-op :primary-key ((processor sqlite3-processor) args)
+  (raw-string processor "PRIMARY KEY (")
+  (intersperse processor ", " args)
+  (raw-string processor ")"))
+
 (define-sql-op sqlite3-processor :alter)
 
 (define-sql-op sqlite3-processor :analyze)

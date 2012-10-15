@@ -21,6 +21,9 @@
 (defmacro exec (sexp)
   `(sqlite3-exec *db* (ssql ,sexp)))
 
+(defun exec* (sexp)
+  (sqlite3-exec *db* (ssql* sexp)))
+
 (defmacro do-rows (stmt sexp &body body)
   `(sqlite3-exec
     *db* (ssql ,sexp)

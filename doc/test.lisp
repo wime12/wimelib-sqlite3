@@ -5,8 +5,8 @@
 
 (defclass tree-data ()
   ((plot-id :column-type t :accessor plot-id :initarg :plot-id
-	    :column-name |plot-id|)
-   (tree-tag-number :primary-key t :reader tree-tag-number
+	    :column-name |plot-id| :not-null t :unique t)
+   (tree-tag-number :reader tree-tag-number
 		    :initarg :tree-tag-number :column-name |tree-tag-number|)
    (species-id :column-type t :accessor species-id
 	       :initarg :species-id :column-name |species-id|)
@@ -21,15 +21,15 @@
    (notes :column-type t :accessor notes
 	  :initarg :notes :column-name |notes|))
   (:metaclass da-class)
-  (:table-name |tree-data|))
+  (:table-name |tree-data|)
+  (:primary-key tree-tag-number))
 
 (defclass plot-description ()
   ((sample-area-number :column-type t
 		      :accessor sample-area-number
 		      :initform nil
 		      :initarg :sample-area-number)
-   (plot-number :primary-key t
-		:accessor plot-number
+   (plot-number	:accessor plot-number
 		:initform nil
 		:initarg :plot-number)
    (plot-size :column-type t
@@ -72,7 +72,8 @@
 	 :accessor notes
 	 :initform nil
 	 :initarg :notes))
-  (:metaclass da-class))
+  (:metaclass da-class)
+  (:primary-key plot-number))
 
 (defparameter *tree*
   (make-instance 'tree-data
