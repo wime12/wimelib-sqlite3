@@ -141,14 +141,6 @@
 (defun not-null-slots (da-class)
   (remove-if-not #'da-slot-not-null (class-slots da-class)))
 
-#+nil(defgeneric ensure-class-finalized (class-designator)
-  (:method ((class-name symbol))
-    (ensure-class-finalized (find-class class-name)))
-  (:method ((class standard-class))
-    (unless (class-finalized-p class)
-      (finalize-inheritance class)
-      t)))
-
 (defgeneric primary-key (da-or-da-class)
   (:method ((da-name symbol))
     (primary-key (find-class da-name)))
@@ -241,7 +233,7 @@
 
 (defgeneric select-das (class-name &key where)
   (:method ((class-name symbol) &key where)
-    (ensure-class-finalized class-name)
+    (ensure-finalized class-name)
     (funcall #'select-das class-name :where where)))
 
 ;;; The following functions generate the code for the methods
