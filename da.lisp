@@ -216,8 +216,6 @@
     (when primary-key
       `((:primary-key ,@primary-key)))))
 
-;; TODO: default values
-
 (defgeneric insert-da (da))
 
 (defgeneric update-record (da))
