@@ -100,24 +100,6 @@
   (declare (ignore initargs))
   (find-class 'da-standard-effective-slot-definition))
 
-#+nil(defmethod compute-effective-slot-definition :around
-    ((class da-class) slot-name direct-slot-definitions)
-  (declare (optimize debug))
-  (let ((slotd (call-next-method)))
-    (with-slots (column-type not-null unique column-name) slotd
-      (let ((ct (some #'da-slot-column-type direct-slot-definitions))
-	    (nn (some #'da-slot-not-null direct-slot-definitions))
-	    (un (some #'da-slot-unique direct-slot-definitions)))
-	(break)
-	(when (or ct nn un)
-	  (setf column-type (or ct t))
-	  (setf not-null (or nn t))
-	  (setf unique (or un t))
-	  (setf column-name
-	      (or (da-slot-column-name (car direct-slot-definitions))
-		  slot-name)))))
-    slotd))
-
 (defmethod compute-effective-slot-definition :around
     ((class da-class) slot-name direct-slot-definitions)
   (declare (optimize debug))
@@ -136,10 +118,12 @@
 	  (if column-type
 	      (setf not-null nn
 		    unique un
-		    column-name (or (da-slot-column-name
-				     (car direct-slot-definitions))
-				    (slot-definition-name
-				     (car direct-slot-definitions))))
+		    column-name (or (and (slot-boundp
+                                          (car direct-slot-definitions)
+                                          'column-name)
+                                         (da-slot-column-name
+				          (car direct-slot-definitions)))
+				    slot-name))
 	      (setf not-null nil
 		    unique nil
 		    column-name nil)))))
