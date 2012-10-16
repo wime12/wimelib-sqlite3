@@ -235,7 +235,7 @@
 
 (defgeneric select-das (class-name &key where)
   (:method ((class-name symbol) &key where)
-    (ensure-finalized class-name)
+    (ensure-finalized (find-class class-name))
     (funcall #'select-das class-name :where where)))
 
 ;;; The following functions generate the code for the methods
@@ -361,7 +361,7 @@
 	 (if where
 	     (do-query ,all-column-slot-names
 		 (:select (:columns ,@all-columns) :from ,table-name
-			  :where (:embed where))
+			   :where (:embed where))
 	       (let ((,new-da (make-instance ',class-name)))
 		 ,(make-set-slots-exp new-da all-column-slot-names)
 		 (push ,new-da ,result)))
