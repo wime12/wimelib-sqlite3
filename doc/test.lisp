@@ -3,6 +3,13 @@
 (defparameter *a* (merge-pathnames "doc/amazonia.db"
 				   wimelib-sqlite3-config:*BASE-DIRECTORY*))
 
+(defclass species-list ()
+  ((local-name :accessor local-name :initarg :local-name)
+   (scientific-name :accessor scientific-name :initarg :scientific-name)
+   (species-id :accessor species-id :initarg :species-id))
+  (:metaclass da-class)
+  (:primary-key species-id))
+
 (defclass tree-data ()
   ((plot-id :column-type t :accessor plot-id :initarg :plot-id
 	    :column-name |plot-id| :not-null t :unique t)
