@@ -356,20 +356,16 @@
 			    all-columns)
   (let ((result (make-symbol "RESULT"))
 	(new-da (make-symbol "NEW-DA")))
-    `(defmethod select-das ((da-class (eql ',class-name)) &key where)
+    `(defmethod select-das ((da-class (eql ',class-name)) &key where order-by)
        (let ((,result nil))
-	 (if where
-	     (do-query ,all-column-slot-names
-		 (:select (:columns ,@all-columns) :from ,table-name
-			   :where (:embed where))
+	 (do-query ,all-column-slot-names
+		 (:select (:columns ,@all-columns)
+			  :from ,table-name
+			  :where (:embed (or where 1))
+			  :order :by (:embed (or order-by :null)))
 	       (let ((,new-da (make-instance ',class-name)))
 		 ,(make-set-slots-exp new-da all-column-slot-names)
 		 (push ,new-da ,result)))
-	     (do-query ,all-column-slot-names
-		 (:select (:columns ,@all-columns) :from ,table-name)
-	       (let ((,new-da (make-instance ',class-name)))
-		 ,(make-set-slots-exp new-da all-column-slot-names)
-		 (push ,new-da ,result))))
 	 (nreverse ,result)))))
 
 (defun make-set-slots-exp (da all-columns)
