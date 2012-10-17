@@ -352,6 +352,10 @@
       `(:and ,@(mapcar #'where-exp column-slots column-names))
       (where-exp (car column-slots) (car column-names))))
 
+(define-sql-op :where sqlite3-processor)
+
+(define-sql-op :order sqlite3-processor)
+
 (defun make-select-das-exp (class-name table-name all-column-slot-names
 			    all-columns)
   (let ((result (make-symbol "RESULT"))
@@ -361,8 +365,10 @@
 	 (do-query ,all-column-slot-names
 		 (:select (:columns ,@all-columns)
 			  :from ,table-name
-			  :where (:embed (or where 1))
-			  :order :by (:embed (or order-by :null)))
+			  (:embed (when where
+				    `(:where ,where)))
+			  (:embed (when order-by
+				    `(:order :by ,order-by))))
 	       (let ((,new-da (make-instance ',class-name)))
 		 ,(make-set-slots-exp new-da all-column-slot-names)
 		 (push ,new-da ,result)))

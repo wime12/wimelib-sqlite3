@@ -85,45 +85,45 @@
   (intersperse processor ", " args)
   (raw-string processor ")"))
 
-(define-sql-op sqlite3-processor :alter)
+(define-sql-op :alter sqlite3-processor)
 
-(define-sql-op sqlite3-processor :analyze)
+(define-sql-op :analyze sqlite3-processor)
 
-(define-sql-op sqlite3-processor :attach)
+(define-sql-op :attach sqlite3-processor)
 
-(define-sql-op sqlite3-processor :begin)
+(define-sql-op :begin sqlite3-processor)
 
-(define-sql-op sqlite3-processor :commit)
+(define-sql-op :commit sqlite3-processor)
 
-(define-sql-op sqlite3-processor :create)
+(define-sql-op :create sqlite3-processor)
 
-(define-sql-op sqlite3-processor :delete)
+(define-sql-op :delete sqlite3-processor)
 
-(define-sql-op sqlite3-processor :detach)
+(define-sql-op :detach sqlite3-processor)
 
-(define-sql-op sqlite3-processor :drop)
+(define-sql-op :drop sqlite3-processor)
 
-(define-sql-op sqlite3-processor :end)
+(define-sql-op :end sqlite3-processor)
 
-(define-sql-op sqlite3-processor :explain)
+(define-sql-op :explain sqlite3-processor)
 
-(define-sql-op sqlite3-processor :insert)
+(define-sql-op :insert sqlite3-processor)
 
-(define-sql-op sqlite3-processor :pragma)
+(define-sql-op :pragma sqlite3-processor)
 
-(define-sql-op sqlite3-processor :reindex)
+(define-sql-op :reindex sqlite3-processor)
 
-(define-sql-op sqlite3-processor :release)
+(define-sql-op :release sqlite3-processor)
 
-(define-sql-op sqlite3-processor :rollback)
+(define-sql-op :rollback sqlite3-processor)
 
-(define-sql-op sqlite3-processor :savepoint)
+(define-sql-op :savepoint sqlite3-processor)
 
-(define-sql-op sqlite3-processor :select)
+(define-sql-op :select sqlite3-processor)
 
-(define-sql-op sqlite3-processor :update)
+(define-sql-op :update sqlite3-processor)
 
-(define-sql-op sqlite3-processor :vacuum)
+(define-sql-op :vacuum sqlite3-processor)
 
 (defun enable-bind-reader-syntax ()
   (set-macro-character #\$
