@@ -286,8 +286,8 @@
     `(defmethod update-record ((,da ,class-name))
        (with-slots ,all-column-slot-names ,da
 	 (exec (:update ,table-name
-			:set (:columns ,@(make-assign-values-exp
-					  all-column-slot-names all-columns))
+			:set (:row ,@(make-assign-values-exp
+				      all-column-slot-names all-columns))
 			:where ,(where-exps
 				 primary-key-slot-names primary-keys)))))))
 
@@ -307,7 +307,7 @@
 		(car
 		 (query
 		  (:select
-		   (:columns ,@all-columns)
+		   (:row ,@all-columns)
 		   :from ,table-name
 		   :where ,(where-exps primary-key-slot-names primary-keys)))))))
 	 (destructuring-bind ,all-column-slot-names ,result
@@ -334,7 +334,7 @@
 	       "Values for all primary keys must be provided: ~A" ',primary-keys)
        (let ((,data (car
 		     (query
-		      (:select (:columns ,@all-columns)
+		      (:select (:row ,@all-columns)
 			       :from ,table-name
 			       :where ,(where-exps primary-key-slot-names
 						   primary-keys))))))
@@ -352,10 +352,6 @@
       `(:and ,@(mapcar #'where-exp column-slots column-names))
       (where-exp (car column-slots) (car column-names))))
 
-(define-sql-op :where sqlite3-processor)
-
-(define-sql-op :order sqlite3-processor)
-
 (defun make-select-das-exp (class-name table-name all-column-slot-names
 			    all-columns)
   (let ((result (make-symbol "RESULT"))
@@ -363,12 +359,13 @@
     `(defmethod select-das ((da-class (eql ',class-name)) &key where order-by)
        (let ((,result nil))
 	 (do-query ,all-column-slot-names
-		 (:select (:columns ,@all-columns)
+		 (:select (:row ,@all-columns)
 			  :from ,table-name
+			  (:splice :where (:embe))
 			  (:embed (when where
-				    `(:where ,where)))
+				    `(:splice :where ,where)))
 			  (:embed (when order-by
-				    `(:order :by ,order-by))))
+				    `(:splice :order :by ,order-by))))
 	       (let ((,new-da (make-instance ',class-name)))
 		 ,(make-set-slots-exp new-da all-column-slot-names)
 		 (push ,new-da ,result)))
