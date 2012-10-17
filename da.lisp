@@ -361,7 +361,6 @@
 	 (do-query ,all-column-slot-names
 		 (:select (:row ,@all-columns)
 			  :from ,table-name
-			  (:splice :where (:embe))
 			  (:embed (when where
 				    `(:splice :where ,where)))
 			  (:embed (when order-by
