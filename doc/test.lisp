@@ -92,4 +92,3 @@
 		 :dbh 5.4
 		 :species-id 100
 		 :plot-id 2))
-

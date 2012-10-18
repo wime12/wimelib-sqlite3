@@ -39,21 +39,19 @@
 (defmacro map-query (sequence-type fun sexp)
   (let ((stmt (gensym))
 	(result (gensym)))
-    `(let ((,result nil))
-       (do-rows ,stmt ,sexp
-	 (push (funcall ,fun (column-values ,stmt)) ,result))
-       (coerce (nreverse ,result) ,sequence-type))))
+    `(coerce
+      (collecting
+	(do-rows ,stmt ,sexp
+	  (collect (funcall ,fun (column-values ,stmt)))))
+      ,sequence-type)))
+
+;;; TODO: collect into right sequence?
 
 (defmacro query (sexp &key flatp)
-  (let ((stmt (gensym "STMT")))
-    `(let ((result nil))
-       (do-rows ,stmt ,sexp
-	 (when (not result)
-	   (push (wimelib-sqlite3:sqlite3-column-names ,stmt) result))
-	 (push (column-values ,stmt) result))
-       (let ((res (nreverse result)))
-	 (values
-	  ,(if flatp
-	       `(mapcan #'identity (cdr res))
-	       `(cdr res))
-	  (car res))))))
+  (let* ((stmt (gensym "STMT"))
+	 (exp `(collecting
+		 (do-rows ,stmt ,sexp
+		   (collect (column-values ,stmt))))))
+    (if flatp
+	`(mapcan #'identity ,exp)
+	exp)))

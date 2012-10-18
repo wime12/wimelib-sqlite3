@@ -21,8 +21,7 @@
   t)
 
 (defclass da-object ()
-  ()
-  (:metaclass da-class))
+  ())
 
 (defmethod print-object ((da da-object) stream)
   (print-unreadable-object (da stream :type t :identity t)
@@ -353,21 +352,22 @@
 
 (defun make-select-das-exp (class-name table-name all-column-slot-names
 			    all-columns)
-  (let ((result (make-symbol "RESULT"))
-	(new-da (make-symbol "NEW-DA")))
-    `(defmethod select-das ((da-class (eql ',class-name)) &key where order-by)
-       (let ((,result nil))
+  (let ((new-da (make-symbol "NEW-DA")))
+    `(defmethod select-das ((da-class (eql ',class-name))
+			    &key where order-by limit)
+       (collecting
 	 (do-query ,all-column-slot-names
 		 (:select (:row ,@all-columns)
 			  :from ,table-name
 			  (:embed (when where
 				    `(:splice :where ,where)))
 			  (:embed (when order-by
-				    `(:splice :order :by ,order-by))))
+				    `(:splice :order :by ,order-by)))
+			  (:embed (when limit
+				    `(:splice :limit ,limit))))
 	       (let ((,new-da (make-instance ',class-name)))
 		 ,(make-set-slots-exp new-da all-column-slot-names)
-		 (push ,new-da ,result)))
-	 (nreverse ,result)))))
+		 (collect ,new-da)))))))
 
 (defun make-set-slots-exp (da all-columns)
   (when all-columns
