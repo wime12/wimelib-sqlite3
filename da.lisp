@@ -2,7 +2,6 @@
 
 ;; TODO: references
 ;; TODO: default values
-;; TODO: sorting for SELECT-DAS
 
 (define-condition da-error (error)
   ((da :reader da-error-da)))
