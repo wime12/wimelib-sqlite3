@@ -45,8 +45,7 @@
   (print (column-values stmt)))
 
 (defun prepared-results (prepared-stmt &rest args)
-  (let ((result nil))
+  (collecting
     (apply prepared-stmt (lambda (stmt)
-			   (push (column-values stmt) result))
-	   args)
-    (nreverse result)))
+			   (collect (column-values stmt)))
+	   args)))
