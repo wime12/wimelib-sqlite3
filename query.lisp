@@ -37,8 +37,7 @@
 	 ,@body))))
 
 (defmacro map-query (sequence-type fun sexp)
-  (let ((stmt (gensym))
-	(result (gensym)))
+  (let ((stmt (gensym)))
     `(coerce
       (collecting
 	(do-rows ,stmt ,sexp
