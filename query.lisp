@@ -18,6 +18,9 @@
      for i from 0 below (sqlite3-data-count stmt)
      collect (column-value stmt i)))
 
+(defun column-names (stmt)
+  (sqlite3-column-names stmt))
+
 (defmacro exec (sexp)
   `(sqlite3-exec *db* (ssql ,sexp)))
 
@@ -51,7 +54,7 @@
 	  (result (collecting
 		    (do-rows stmt ,sexp
 		      (unless column-names
-			(setf column-names (sqlite3-column-names stmt)))
+			(setf column-names (column-names stmt)))
 		      (collect (column-values stmt))))))
      ,(if flatp
 	  `(values (apply #'nconc result) column-names)
