@@ -47,10 +47,12 @@
 ;;; TODO: collect into right sequence?
 
 (defmacro query (sexp &key flatp)
-  (let* ((stmt (gensym "STMT"))
-	 (exp `(collecting
-		 (do-rows ,stmt ,sexp
-		   (collect (column-values ,stmt))))))
-    (if flatp
-	`(mapcan #'identity ,exp)
-	exp)))
+  `(let* ((column-names nil)
+	  (result (collecting
+		    (do-rows stmt ,sexp
+		      (unless column-names
+			(setf column-names (sqlite3-column-names stmt)))
+		      (collect (column-values stmt))))))
+     ,(if flatp
+	  `(values (apply #'nconc result) column-names)
+	  '(values result column-names))))
