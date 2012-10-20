@@ -33,16 +33,21 @@
    list-tables
    table-exists-p
    list-indices
-   attribute-list
+   find-attributes
+   list-attributes
+   list-column-names
    attribute-name
    attribute-type
+   attribute-maybe-null-p
+   attribute-default-value
    defprepared
    prepare
    prepared-results
    enable-bind-reader-syntax
    disable-bind-reader-syntax
    da-class
-   table-name
+   da-class-table-name
+   #+nilda-slot-column-name
    insert-da
    update-record
    refresh-da

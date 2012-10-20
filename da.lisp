@@ -3,18 +3,10 @@
 ;; TODO: references
 ;; TODO: default values
 
-(define-condition da-error (error)
-  ((da :reader da-error-da)))
-
-(define-condition da-does-not-exist-error (da-error)
-  ())
-
-(define-condition da-exists-error (da-error)
-  ())
-
 (defclass da-class (standard-class)
   ((table-name :initarg :table-name :initform nil)
-   (primary-key :initarg :primary-key :initform nil :accessor da-class-primary-key))
+   (primary-key :initarg :primary-key :initform nil
+		:accessor da-class-primary-key))
   (:documentation "Metaclass for database access objects."))
 
 (defmethod validate-superclass ((class da-class) (super-class standard-class))
@@ -212,19 +204,31 @@
     (when primary-key
       `((:primary-key ,@primary-key)))))
 
-(defgeneric insert-da (da))
+(defgeneric insert-da (da)
+  (:documentation "Inserts a dabase access object into the database.
+If any constraints are violated, an error is signalled."))
 
-(defgeneric update-record (da))
+(defgeneric update-record (da)
+  (:documentation "Updates an existing record in the database."))
 
-(defgeneric refresh-da (da))
+(defgeneric refresh-da (da)
+  (:documentation "Updates the slots of a database access object with
+the values of its record in the database."))
 
-(defgeneric delete-da (da))
+(defgeneric delete-da (da)
+  (:documentation "Deletes the record of a database object in the database."))
+
+;; TODO: In GET-DA die Slotnamen oder die Initargs für die Parameter des
+;; Schlüssels benutzen?
 
 (defgeneric get-da (class-name &rest args &key &allow-other-keys)
+  (:documentation "Creates a database access object from its record
+in the database. The record is found by using the primary key given
+as keyword arguments.")
   (:method ((class-name symbol) &rest args &key &allow-other-keys)
     (let ((class (find-class class-name)))
       (if (class-finalized-p class)
-	  ;; If class was finalized but we get here, then no method
+	  ;; If class was finalized but we get here again, then no method
 	  ;; was eql-specialized on the class name during finalize-inheritance,
 	  ;; hence the class does not have primary keys
 	  (error "No primary keys were specified for class ~A" class-name)

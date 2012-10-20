@@ -126,15 +126,22 @@
 (define-sql-op :vacuum sqlite3-processor)
 
 (defun enable-bind-reader-syntax ()
+  "Enables the reader syntax for host parameters in
+prepared queries. Host parameters in an SQL expression
+can then be denoted by prepending a '$' to the symbol."
   (set-macro-character #\$
     (lambda (stream char)
       (declare (ignorable char))
       (list :bind (read stream)))))
 
 (defun disable-bind-reader-syntax ()
+  "Disables the reader syntax for host parameters in
+prepared queries."
   (set-macro-character #\$ nil))
 
 (defmacro ssql (sexp)
+  "Compiles an SQL sexp to lisp expressions which return the
+corresponding SQL string."
   (multiple-value-bind (code embed-p) (compile-sql (get-sql-compiler) sexp)
     (let ((code `(with-output-to-string (*sql-output*) ,code)))
       (if embed-p
@@ -142,5 +149,6 @@
 	  code))))
 
 (defun ssql* (sexp)
+  "Translates an SQL sexp to an SQL string."
   (with-output-to-string (*sql-output*)
     (interprete-sql (get-sql-interpreter) sexp)))

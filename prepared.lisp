@@ -26,9 +26,19 @@
 	(call-prepared stmt fun args)))))
 
 (defmacro defprepared (name sexp)
+  "Defines a prepared query under the given name.
+The prepared query is a lisp function. When calling it
+the first parameter is a function that is applied to
+the result rows or NIL. The following parameters are the
+host parameters of the prepared query."
   `(prepared-aux (defun ,name) ,sexp))
 
 (defmacro prepare (sexp)
+  "Defines an anonymous prepared query.
+The result a lisp function.  When calling it
+the first parameter is a function that is applied to
+the result rows or NIL. The following parameters are the
+host parameters of the prepared query."
   `(prepared-aux (lambda) ,sexp))
 
 (defgeneric bind-parameter (stmt i arg)
@@ -40,12 +50,3 @@
     (sqlite3-bind-float stmt i arg))
   (:method (stmt i (arg null))
     (sqlite3-bind-null stmt i)))
-
-(defun print-row (stmt)
-  (print (column-values stmt)))
-
-(defun prepared-results (prepared-stmt &rest args)
-  (collecting
-    (apply prepared-stmt (lambda (stmt)
-			   (collect (column-values stmt)))
-	   args)))
