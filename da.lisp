@@ -211,9 +211,13 @@ If any constraints are violated, an error is signalled."))
 (defgeneric update-record (da)
   (:documentation "Updates an existing record in the database."))
 
+(defgeneric %refresh-da (da))
+
 (defgeneric refresh-da (da)
   (:documentation "Updates the slots of a database access object with
-the values of its record in the database."))
+the values of its record in the database.")
+  (:method (da)
+    (%refresh-da da)))
 
 (defgeneric delete-da (da)
   (:documentation "Deletes the record of a database object in the database."))
@@ -221,11 +225,11 @@ the values of its record in the database."))
 ;; TODO: In GET-DA die Slotnamen oder die Initargs für die Parameter des
 ;; Schlüssels benutzen?
 
-(defgeneric get-da (class-name &rest args &key &allow-other-keys)
+(defgeneric get-da (class-name &rest initargs &key &allow-other-keys)
   (:documentation "Creates a database access object from its record
 in the database. The record is found by using the primary key given
 as keyword arguments.")
-  (:method ((class-name symbol) &rest args &key &allow-other-keys)
+  (:method ((class-name symbol) &rest initargs &key &allow-other-keys)
     (let ((class (find-class class-name)))
       (if (class-finalized-p class)
 	  ;; If class was finalized but we get here again, then no method
@@ -233,7 +237,7 @@ as keyword arguments.")
 	  ;; hence the class does not have primary keys
 	  (error "No primary keys were specified for class ~A" class-name)
 	  (finalize-inheritance class)))
-    (apply #'get-da class-name args)))
+    (apply #'get-da class-name initargs)))
 
 (defgeneric select-das (class-name &key where)
   (:method ((class-name symbol) &key where)
@@ -263,14 +267,12 @@ as keyword arguments.")
 		(make-update-record-exp class table-name
 					all-column-slot-names all-columns
 					primary-key-slot-names primary-key-column-names)
-		(make-refresh-da-exp class table-name
+		(make-%refresh-da-exp class table-name
 				     all-column-slot-names all-columns
 				     primary-key-slot-names primary-key-column-names)
 		(make-delete-da-exp class table-name
 				    primary-key-slot-names primary-key-column-names)
-		(make-get-da-exp class-name table-name
-				 all-column-slot-names all-columns
-				 primary-key-slot-names primary-key-column-names)))))))
+		(make-get-da-exp class-name)))))))
 
 (defun make-insert-da-exp (class-name table-name all-column-slot-names all-columns)
   (let ((da (make-symbol "DA")))
@@ -298,12 +300,12 @@ as keyword arguments.")
 	    `(,cname := (:embed ,cslot)))
 	  column-slots column-names))
 
-(defun make-refresh-da-exp (class table-name
+(defun make-%refresh-da-exp (class table-name
 			    all-column-slot-names all-columns
 			    primary-key-slot-names primary-keys)
   (let ((da (make-symbol "DA"))
 	(result (make-symbol "RESULT")))
-    `(defmethod refresh-da ((,da ,class))
+    `(defmethod %refresh-da ((,da ,class))
        (let ((,result
 	      (with-slots ,primary-key-slot-names ,da
 		(car
@@ -325,26 +327,12 @@ as keyword arguments.")
 			:where ,(where-exps
 				 primary-key-slot-names primary-keys)))))))
 
-(defun make-get-da-exp (class-name table-name
-			all-column-slot-names all-columns
-			primary-key-slot-names primary-keys)
-  (let ((data (make-symbol "DATA"))
-	(new-da (make-symbol "NEW-DA")))
+(defun make-get-da-exp (class-name)
+  (with-unique-names (new-da)
     `(defmethod get-da ((da-class (eql ',class-name))
-			&key ,@primary-key-slot-names)
-       (assert (and ,@primary-key-slot-names) ,primary-key-slot-names
-	       "Values for all primary keys must be provided: ~A" ',primary-keys)
-       (let ((,data (car
-		     (query
-		      (:select (:row ,@all-columns)
-			       :from ,table-name
-			       :where ,(where-exps primary-key-slot-names
-						   primary-keys))))))
-	 (when ,data
-	   (let ((,new-da (make-instance ',class-name)))
-	     (destructuring-bind ,all-column-slot-names ,data
-	       ,(make-set-slots-exp new-da all-column-slot-names))
-	     ,new-da))))))
+			&rest initargs &key &allow-other-keys)
+       (let ((,new-da (apply #'make-instance da-class initargs)))
+	 (%refresh-da ,new-da)))))
 
 (defun where-exp (column-slot column-name)
   `(:= ,column-name (:embed ,column-slot)))
