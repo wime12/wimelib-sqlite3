@@ -140,6 +140,9 @@ They do not impose any restrictions on the values in the slot."))
   (remove-if-not #'da-slot-not-null (class-slots da-class)))
 
 (defgeneric primary-key (da-or-da-class)
+  (:documentation "Returns the slot-names constituting the primary key if a
+class or class name is given or a plist of column names and values
+if a database access object is given.")
   (:method ((da-name symbol))
     (primary-key (find-class da-name)))
   (:method ((da-class da-class))
@@ -177,13 +180,13 @@ They do not impose any restrictions on the values in the slot."))
 	  slot-names))
 
 (defmethod finalize-inheritance :after ((class da-class))
-  (let ((deserted-primary-key
+  (let ((deserted-primary-key-slots
 	 (set-difference (da-class-primary-key class)
 			 (slot-names (persistent-slots class)))))
-    (when deserted-primary-key
+    (when deserted-primary-key-slots
       (error "Primary key for class ~A: no slot~p ~{~A~^, ~}"
-	     (class-name class) (length deserted-primary-key)
-	     deserted-primary-key)))
+	     (class-name class) (length deserted-primary-key-slots)
+	     deserted-primary-key-slots)))
   (funcall (compile nil `(lambda () ,@(make-defmethod-exps class)))))
 
 (defun da-class-table-name (da-class)
@@ -224,7 +227,8 @@ If any constraints are violated, an error is signalled."))
 
 (defgeneric refresh-da (da)
   (:documentation "Updates the slots of a database access object with
-the values of its record in the database.")
+the values of its record in the database. If the update was
+successful then the updated object is returned, NIL otherwise.")
   (:method (da)
     (%refresh-da da)))
 
@@ -237,21 +241,27 @@ the values of its record in the database.")
 (defgeneric get-da (class-name &rest initargs &key &allow-other-keys)
   (:documentation "Creates a database access object from its record
 in the database. The record is found by using the primary key given
-as keyword arguments.")
+as keyword arguments. If nothing is found the result is NIL.")
   (:method ((class-name symbol) &rest initargs &key &allow-other-keys)
     (let ((class (find-class class-name)))
-      (if (class-finalized-p class)
-	  ;; If class was finalized but we get here again, then no method
-	  ;; was eql-specialized on the class name during finalize-inheritance,
-	  ;; hence the class does not have primary keys
-	  (error "No primary keys were specified for class ~A" class-name)
-	  (finalize-inheritance class)))
-    (apply #'get-da class-name initargs)))
+      (ensure-finalized class)
+      (%refresh-da (apply #'make-instance class initargs)))))
 
-(defgeneric select-das (class-name &key where)
-  (:method ((class-name symbol) &key where)
+(defgeneric select-das (class-name &key where order-by limit)
+  (:documentation "Returns a list of database access objects
+of the given da-class. The list of objects can be restricted
+by providing an SQL form for the WHERE clause and a number
+for the LIMIT clause. The sorting is determind by the ODER-BY
+clause.
+
+Example
+  (select-das 'customers :where '(:> age 21)
+                         :order-by '(:random)
+                         :limit 5)")
+  (:method ((class-name symbol) &key where order-by limit)
     (ensure-finalized (find-class class-name))
-    (funcall #'select-das class-name :where where)))
+    (funcall #'select-das class-name :where where
+	     :order-by order-by :limit limit)))
 
 ;;; The following functions generate the code for the methods
 ;;; which are added during inheritance finalization.
@@ -275,16 +285,18 @@ as keyword arguments.")
 	       (list
 		(make-update-record-exp class table-name
 					all-column-slot-names all-columns
-					primary-key-slot-names primary-key-column-names)
+					primary-key-slot-names
+					primary-key-column-names)
 		(make-%refresh-da-exp class table-name
 				     all-column-slot-names all-columns
-				     primary-key-slot-names primary-key-column-names)
+				     primary-key-slot-names
+				     primary-key-column-names)
 		(make-delete-da-exp class table-name
-				    primary-key-slot-names primary-key-column-names)
-		(make-get-da-exp class-name)))))))
+				    primary-key-slot-names
+				    primary-key-column-names)))))))
 
 (defun make-insert-da-exp (class-name table-name all-column-slot-names all-columns)
-  (let ((da (make-symbol "DA")))
+  (with-unique-names (da)
     `(defmethod insert-da ((,da ,class-name))
        (with-slots ,all-column-slot-names ,da
 	 (exec (:insert :into ,table-name ,all-columns
@@ -295,7 +307,7 @@ as keyword arguments.")
 (defun make-update-record-exp (class-name table-name
 			       all-column-slot-names all-columns
 			       primary-key-slot-names primary-keys)
-  (let ((da (make-symbol "DA")))
+  (with-unique-names (da)
     `(defmethod update-record ((,da ,class-name))
        (with-slots ,all-column-slot-names ,da
 	 (exec (:update ,table-name
@@ -312,8 +324,7 @@ as keyword arguments.")
 (defun make-%refresh-da-exp (class table-name
 			    all-column-slot-names all-columns
 			    primary-key-slot-names primary-keys)
-  (let ((da (make-symbol "DA"))
-	(result (make-symbol "RESULT")))
+  (with-unique-names (da result)
     `(defmethod %refresh-da ((,da ,class))
        (let ((,result
 	      (with-slots ,primary-key-slot-names ,da
@@ -323,25 +334,19 @@ as keyword arguments.")
 		   (:row ,@all-columns)
 		   :from ,table-name
 		   :where ,(where-exps primary-key-slot-names primary-keys)))))))
-	 (destructuring-bind ,all-column-slot-names ,result
-	   ,(make-set-slots-exp da all-column-slot-names)))
-       ,da)))
+	 (when ,result
+	   (destructuring-bind ,all-column-slot-names ,result
+	     ,(make-set-slots-exp da all-column-slot-names)
+	     ,da))))))
 
 (defun make-delete-da-exp (class-name table-name
 			   primary-key-slot-names primary-keys)
-  (let ((da (make-symbol "DA")))
+  (with-unique-names (da)
     `(defmethod delete-da ((,da ,class-name))
        (with-slots ,primary-key-slot-names ,da
 	 (exec (:delete :from ,table-name
 			:where ,(where-exps
 				 primary-key-slot-names primary-keys)))))))
-
-(defun make-get-da-exp (class-name)
-  (with-unique-names (new-da)
-    `(defmethod get-da ((da-class (eql ',class-name))
-			&rest initargs &key &allow-other-keys)
-       (let ((,new-da (apply #'make-instance da-class initargs)))
-	 (%refresh-da ,new-da)))))
 
 (defun where-exp (column-slot column-name)
   `(:= ,column-name (:embed ,column-slot)))
@@ -353,22 +358,22 @@ as keyword arguments.")
 
 (defun make-select-das-exp (class-name table-name all-column-slot-names
 			    all-columns)
-  (let ((new-da (make-symbol "NEW-DA")))
+  (with-unique-names (da)
     `(defmethod select-das ((da-class (eql ',class-name))
 			    &key where order-by limit)
        (collecting
 	 (do-query ,all-column-slot-names
-		 (:select (:row ,@all-columns)
-			  :from ,table-name
-			  (:embed (when where
-				    `(:splice :where ,where)))
-			  (:embed (when order-by
-				    `(:splice :order :by ,order-by)))
-			  (:embed (when limit
-				    `(:splice :limit ,limit))))
-	       (let ((,new-da (make-instance ',class-name)))
-		 ,(make-set-slots-exp new-da all-column-slot-names)
-		 (collect ,new-da)))))))
+	     (:select (:row ,@all-columns)
+		      :from ,table-name
+		      (:embed (when where
+				`(:splice :where ,where)))
+		      (:embed (when order-by
+				`(:splice :order :by ,order-by)))
+		      (:embed (when limit
+				`(:splice :limit ,limit))))
+	   (let ((,da (make-instance ',class-name)))
+	     ,(make-set-slots-exp da all-column-slot-names)
+	     (collect ,da)))))))
 
 (defun make-set-slots-exp (da all-columns)
   (when all-columns

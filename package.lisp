@@ -47,6 +47,7 @@
    da-class
    da-class-schema
    check-schema
+   primary-key
    insert-da
    update-record
    refresh-da
