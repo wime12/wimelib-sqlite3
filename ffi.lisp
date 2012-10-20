@@ -117,7 +117,7 @@
     (signal-sqlite3-error code db)))
 
 (defcfun (%sqlite3-open "sqlite3_open")
-    sqlite3-result-code
+    :int
   (name string-utf8)
   (db (:pointer sqlite3)))
 
@@ -131,7 +131,7 @@
 	   (db (mem-ref db-place '(:pointer sqlite3))))
       (if (sqlite3-error-p code)
 	  (unwind-protect
-	       (check-sqlite3-error code)
+	       (signal-sqlite3-error code db)
 	    (sqlite3-close db))
 	  db))))
 
