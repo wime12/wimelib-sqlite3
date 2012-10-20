@@ -6,7 +6,7 @@
   :author "Wilfried Meindl <wilfried.meindl@gmail.com>"
   :license "Specify license here"
   :depends-on (#:alexandria
-               #:cffi
+               #:wimelib-sqlite3-ffi
 	       #:closer-mop
 	       #:wimelib-sql)
   :components ((:file "package")

@@ -1,8 +1,6 @@
 ;;;; wimelib-sqlite3.lisp
 
-(in-package #:wimelib-sqlite3)
-
-(declaim (optimize (debug 3)))
+(in-package #:wimelib-sqlite3-ffi)
 
 ;;; Library
 
@@ -26,12 +24,10 @@
 
 (defmethod expand-from-foreign (value (type sqlite3-result-code))
   `(let ((value ,value))
-     (check-sqlite3-error ,value) ,value))
+     (check-sqlite3-error value) value))
 
 (defmethod expand-to-foreign (value (type sqlite3-result-code))
   value)
-
-#+nil(defctype sqlite3-result-code :int)
 
 (defcstruct sqlite3-stmt)
 
@@ -86,7 +82,7 @@
    (+sqlite3-done+ 101 "sqlite3_step() has finished executing")))
 
 (defcfun (sqlite3-errcode "sqlite3_errcode")
-    sqlite3-result-code
+    :int
   (db (:pointer sqlite3)))
 
 (defcfun (sqlite3-errmsg "sqlite3_errmsg")
@@ -125,7 +121,7 @@
   (name string-utf8)
   (db (:pointer sqlite3)))
 
-(defcfun (%sqlite3-close "sqlite3_close")
+(defcfun sqlite3-close
     sqlite3-result-code
   (db (:pointer sqlite3)))
 
@@ -133,13 +129,11 @@
   (with-foreign-object (db-place '(:pointer (:pointer sqlite3)))
     (let* ((code (%sqlite3-open filename db-place))
 	   (db (mem-ref db-place '(:pointer sqlite3))))
-      (cond ((sqlite3-error-p code)
-	     (%sqlite3-close db)
-	     (signal-sqlite3-error code nil))
-	    (t db)))))
-
-(defun sqlite3-close (db)
-  (check-sqlite3-error (%sqlite3-close db) db))
+      (if (sqlite3-error-p code)
+	  (unwind-protect
+	       (check-sqlite3-error code)
+	    (sqlite3-close db))
+	  db))))
 
 (defcfun (%sqlite3-prepare "sqlite3_prepare_v2")
     sqlite3-result-code
@@ -152,12 +146,12 @@
 (defun sqlite3-prepare (db sql &optional (length -1))
   (with-foreign-objects ((stmt '(:pointer sqlite3-stmt))
 			 (tail '(:pointer string-utf8)))
-    (check-sqlite3-error (%sqlite3-prepare db sql length stmt tail) db)
+    (%sqlite3-prepare db sql length stmt tail) db
     (values
      (mem-ref (mem-ref stmt :pointer) 'sqlite3-stmt) 
      (mem-ref tail 'string-utf8))))
 
-(defcfun (sqlite3-step "sqlite3_step")
+(defcfun sqlite3-step
     sqlite3-result-code
   (stmt (:pointer sqlite3-stmt)))
 
@@ -226,34 +220,24 @@
 
 (defun sqlite3-bind-blob (stmt parameter-index blob bytes
 			  &optional (destructor sqlite3-bind-destructor-static))
-  (check-sqlite3-error
-   (%sqlite3-bind-blob stmt parameter-index blob bytes destructor)))
+  (%sqlite3-bind-blob stmt parameter-index blob bytes destructor))
 
-(defcfun (%sqlite3-bind-double "sqlite3_bind_double")
+(defcfun (sqlite3-bind-float "sqlite3_bind_double")
     sqlite3-result-code
   (stmt (:pointer sqlite3-stmt))
   (parameter-index :int)
   (value :double))
 
-(defun sqlite3-bind-float (stmt parameter-index value)
-  (check-sqlite3-error (%sqlite3-bind-double stmt parameter-index value)))
-
-(defcfun (%sqlite3-bind-integer "sqlite3_bind_int64")
+(defcfun (sqlite3-bind-integer "sqlite3_bind_int64")
     sqlite3-result-code
   (stmt (:pointer sqlite3-stmt))
   (parameter-index :int)
   (value :int64))
 
-(defun sqlite3-bind-integer (stmt parameter-index value)
-  (check-sqlite3-error (%sqlite3-bind-integer stmt parameter-index value)))
-
-(defcfun (%sqlite3-bind-null "sqlite3_bind_null")
+(defcfun sqlite3-bind-null
     sqlite3-result-code
   (stmt (:pointer sqlite3-stmt))
   (parameter-index :int))
-
-(defun sqlite3-bind-null (stmt parameter-index)
-  (check-sqlite3-error (%sqlite3-bind-null stmt parameter-index)))
 
 (defcfun (%sqlite3-bind-text "sqlite3_bind_text")
     sqlite3-result-code
@@ -266,8 +250,7 @@
 (defun sqlite3-bind-text (stmt parameter-index text
 			  &key (bytes -1) (destructor
 					   sqlite3-bind-destructor-static))
-  (check-sqlite3-error
-   (%sqlite3-bind-text stmt parameter-index text bytes destructor)))
+  (%sqlite3-bind-text stmt parameter-index text bytes destructor))
 
 (defcfun sqlite3-bind-parameter-index
     :int
@@ -283,26 +266,17 @@
   (stmt (:pointer sqlite3-stmt))
   (parameter-index :int))
 
-(defcfun (%sqlite3-clear-bindings "sqlite3_clear_bindings")
+(defcfun sqlite3-clear-bindings
     sqlite3-result-code
   (stmt (:pointer sqlite3-stmt)))
 
-(defun sqlite3-clear-bindings (stmt)
-  (check-sqlite3-error (%sqlite3-clear-bindings stmt)))
-
-(defcfun (%sqlite3-reset "sqlite3_reset")
+(defcfun sqlite3-reset
     sqlite3-result-code
   (stmt (:pointer sqlite3-stmt)))
 
-(defun sqlite3-reset (stmt)
-  (check-sqlite3-error (%sqlite3-reset stmt)))
-
-(defcfun (%sqlite3-finalize "sqlite3_finalize")
+(defcfun sqlite3-finalize
     sqlite3-result-code
   (stmt (:pointer sqlite3-stmt)))
-
-(defun sqlite3-finalize (stmt)
-  (%sqlite3-finalize stmt))
 
 (defun sqlite3-do-rows (stmt &optional fun)
   (do ((result (sqlite3-step stmt) (sqlite3-step stmt)))
@@ -339,3 +313,7 @@
 			      (format stream "~&~{~S~^ | ~}"
 				      (sqlite3-row-values stmt)))))
       (sqlite3-finalize stmt))))
+
+(defcfun sqlite3-extended-errcode
+    :int
+  (db :pointer))
