@@ -7,7 +7,33 @@
   ((table-name :initarg :table-name :initform nil)
    (primary-key :initarg :primary-key :initform nil
 		:accessor da-class-primary-key))
-  (:documentation "Metaclass for database access objects."))
+  (:documentation "The metaclass for database access objects.
+
+Classes of this metaclass accept two new class options: :TABLE-NAME and
+:PRIMARY-KEY. The argument to :TABLE-NAME must be a symbol. It is
+converted to an SQL identifier, which links the class to a table in a
+database. The symbols following :PRIMARY-KEY designate the slot names
+of the class which together form the primary key of the database table.
+
+The slot definitions of database access classes accept the keywords
+:COLUMN-TYPE, :UNIQUE, :NOT-NULL and :COLUMN-NAME in addition to the
+standard keywords.
+
+The argument to :COLUMN-TYPE can be any valid SQL type specifier
+denoting the type affinity of the column in the database, T for
+no type affinity or NIL meaning the slot is not connected to a
+column in the database table. The default is T. It will also be
+set to T if any of :UNIQUE, :NOT-NULL or :COLUMN-NAME are not NIL and
+:COLUMN-TYPE was NIL in the slot definition.
+
+The argument to :COLUMN-NAME, which must be a symbol, is converted to
+an SQL identifier to access the corresponding column in the database
+table.
+
+:UNIQUE and :NOT-NULL are only used for generating the database
+schema from the class definition. They denote if a column can contain
+only unqique values or if it must not contain null values, respectively.
+They do not impose any restrictions on the values in the slot."))
 
 (defmethod validate-superclass ((class da-class) (super-class standard-class))
   t)
@@ -49,28 +75,7 @@
 		   initargs)))
       (call-next-method)))
 
-(defgeneric da-class-table-name (da-class)
-  (:method ((class da-class))
-    (or (car (slot-value class 'table-name)) (class-name class))))
-
-(defgeneric (setf da-class-table-name) (da-class new-value)
-  (:method ((class da-class) new-value)
-    (setf (slot-value class 'table-name) (list new-value))))
-
-(defgeneric da-slot-column-type (slot-definition)
-  (:method (sd)
-    (declare (ignorable sd))
-    nil))
-
-(defgeneric da-slot-not-null (slot-definition)
-  (:method (sd)
-    (declare (ignorable sd))
-    nil))
-
-(defgeneric da-slot-unique (slot-definition)
-  (:method (sd)
-    (declare (ignorable sd))
-    nil))
+;; TODO: (check-schema da-class) einführen
 
 (defclass da-standard-direct-slot-definition (standard-direct-slot-definition)
   ((column-name :initarg :column-name :reader da-slot-column-name)
@@ -106,8 +111,9 @@
 			      direct-slot-definitions)))
 	(let ((ct (if ct-slot (slot-value ct-slot 'column-type) t))
 	      (nn (if nn-slot (slot-value nn-slot 'not-null) nil))
-	      (un (if un-slot (slot-value un-slot 'not-null) nil)))
-	  (setf column-type (or ct nn un))
+	      (un (if un-slot (slot-value un-slot 'unique) nil)))
+	  (setf column-type (or ct nn un (and (slot-boundp slotd 'column-name)
+					      (not (null column-name)))))
 	  (if column-type
 	      (setf not-null nn
 		    unique un
@@ -180,7 +186,10 @@
 	     deserted-primary-key)))
   (funcall (compile nil `(lambda () ,@(make-defmethod-exps class)))))
 
-(defgeneric da-schema (class-designator)
+(defun da-class-table-name (da-class)
+  (or (car (slot-value da-class 'table-name)) (class-name da-class)))
+
+(defgeneric da-class-schema (class-designator)
   (:method ((class da-class))
     (ensure-finalized class)
     `(:create :table ,(da-class-table-name class)
@@ -188,7 +197,7 @@
 		       (persistent-slots class))
 		      (primary-key-declaration class))))
   (:method ((class-designator symbol))
-    (da-schema (find-class class-designator))))
+    (da-class-schema (find-class class-designator))))
 
 (defun column-definition-from-slot-definition (slot-definition)
   (when (da-slot-column-type slot-definition)

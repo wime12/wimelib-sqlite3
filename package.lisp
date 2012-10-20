@@ -42,12 +42,11 @@
    attribute-default-value
    defprepared
    prepare
-   prepared-results
    enable-bind-reader-syntax
    disable-bind-reader-syntax
    da-class
-   da-class-table-name
-   #+nilda-slot-column-name
+   da-class-schema
+   check-schema
    insert-da
    update-record
    refresh-da
