@@ -62,6 +62,13 @@
 	 (raw-string processor " IS NOT ")
 	 (process-sql processor right))))
 
+(define-special-op :not-in ((processor sqlite3-processor) args)
+     (destructuring-bind (left right) args
+       (in-parentheses processor
+	 (process-sql processor left)
+	 (raw-string processor " NOT IN ")
+	 (process-sql processor right))))
+
 (define-conc-ops sqlite3-processor
     :* :/ :and :or :\|\| :% :<< :>> :& :\|)
 
@@ -87,17 +94,36 @@
       (raw-string processor "~")
       (raw-string processor arg))))
 
-(define-special-op :not ((processor sqlite3-processor) args)
+#+nil(define-special-op :not ((processor sqlite3-processor) args)
   (destructuring-bind (arg) args
     (in-parentheses processor
-      (raw-string processor " NOT ")
+      (raw-string processor "NOT ")
       (raw-string processor arg))))
+
+(define-special-op :case ((processor sqlite3-processor) args)
+  (in-parentheses processor
+    (raw-string processor "CASE ")
+    (intersperse processor " " args)))
 
 (define-special-op :between ((processor sqlite3-processor) args)
   (destructuring-bind (var lower upper) args
-    (raw-string processor "(")
-    (intersperse processor " " (list var :between lower :and upper))
-    (raw-string processor ")")))
+    (in-parentheses processor
+      (intersperse processor " " (list var :between lower :and upper)))))
+
+(define-special-op :not-between ((processor sqlite3-processor) args)
+  (destructuring-bind (var lower upper) args
+    (in-parentheses processor
+      (intersperse processor " " (list var :not :between lower :and upper)))))
+
+(define-special-op :exists ((processor sqlite3-processor) args)
+  (in-parentheses processor
+    (raw-string processor "EXISTS ")
+    (process-sql processor args)))
+
+(define-special-op :not-exists ((processor sqlite3-processor) args)
+  (in-parentheses processor
+    (raw-string processor "NOT EXISTS ")
+    (process-sql processor args)))
 
 ;; Syntactic ops
 
