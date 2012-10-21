@@ -1,7 +1,7 @@
 ;;;; package.lisp
 
 (defpackage #:wimelib-sqlite3
-  (:use #:cl #:alexandria #:wimelib-sql #:closer-mop #:wimelib-sqlite3-ffi)
+  (:use #:cl #:wimelib-utilities #:wimelib-sql #:closer-mop #:wimelib-sqlite3-ffi)
   (:shadowing-import-from #:closer-mop
 			  #:standard-method
 			  #:standard-generic-function

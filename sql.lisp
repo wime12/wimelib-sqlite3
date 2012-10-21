@@ -1,21 +1,6 @@
 (in-package #:wimelib-sqlite3)
 
-(defmacro in-parentheses (processor &body body)
-  `(progn
-     (raw-string ,processor "(")
-     ,@body
-     (raw-string ,processor ")")))
-
-(defmacro binary-op (processor op-string args)
-  (let ((left (gensym))
-	(right (gensym)))
-    `(destructuring-bind (,left ,right) ,args
-       (in-parentheses ,processor
-	 (process-sql ,processor ,left)
-	 (raw-string ,processor ,op-string)
-	 (process-sql ,processor ,right)))))
-
-;; Arithmetic operators
+;; Classes
 
 (defclass sqlite3-processor (sql-processor) ())
 
@@ -29,39 +14,84 @@
 (defun get-sql-compiler ()
   (or *sql-compiler* (make-instance 'sqlite3-compiler)))
 
-(define-special-op :+ ((processor sqlite3-processor) args)
-  (in-parentheses processor
-    (intersperse processor " + " args)))
+;; Macros
+
+(defmacro define-sql-ops (processor &rest ops)
+  `(progn ,@(mapcar #'(lambda (op) `(define-sql-op ,op ,processor)) ops)))
+
+(defmacro in-parentheses (processor &body body)
+  `(progn
+     (raw-string ,processor "(")
+     ,@body
+     (raw-string ,processor ")")))
+
+(defmacro define-binary-op (op processor)
+  `(define-special-op ,op ((processor ,processor) args)
+     (destructuring-bind (left right) args
+       (in-parentheses processor
+	 (process-sql processor left)
+	 (raw-string processor ,(concatenate 'string " " (symbol-name op) " "))
+	 (process-sql processor right)))))
+
+(defmacro define-binary-ops (processor &rest ops)
+  `(progn ,@(mapcar #'(lambda (op) `(define-binary-op ,op ,processor)) ops)))
+
+(defmacro define-conc-op (op processor)
+  `(define-special-op ,op ((processor ,processor) args)
+     (in-parentheses processor
+       (intersperse processor ,(concatenate 'string " " (symbol-name op) " ")
+		    args))))
+
+(defmacro define-conc-ops (processor &rest ops)
+  `(progn ,@(mapcar #'(lambda (op) `(define-conc-op ,op ,processor)) ops)))
+
+;; Operators
+
+(define-sql-ops sqlite3-processor
+    :alter :analyze :attach :begin :commit :create :delete :detach :drop :end
+    :explain :insert :pragma :reindex :release :rollback :savepoint :select
+    :update :vacuum)
+
+(define-binary-ops sqlite3-processor
+    := :like :<= :>= :< :> :== :!= :<> :is :in :glob)
+
+(define-special-op :is-not ((processor sqlite3-processor) args)
+     (destructuring-bind (left right) args
+       (in-parentheses processor
+	 (process-sql processor left)
+	 (raw-string processor " IS NOT ")
+	 (process-sql processor right))))
+
+(define-conc-ops sqlite3-processor
+    :* :/ :and :or :\|\| :% :<< :>> :& :\|)
 
 (define-special-op :- ((processor sqlite3-processor) args)
-  (in-parentheses processor
-    (intersperse processor " - " args)))
+  (if (cdr args)
+      (in-parentheses processor
+	(intersperse processor " - " args))
+      (progn
+	(raw-string processor "-")
+	(process-sql processor (car args)))))
 
-(define-special-op :* ((processor sqlite3-processor) args)
-  (in-parentheses processor
-    (intersperse processor " * " args)))
+(define-special-op :+ ((processor sqlite3-processor) args)
+  (if (cdr args)
+      (in-parentheses processor
+	(intersperse processor " + " args))
+      (progn
+	(raw-string processor "+")
+	(process-sql processor (car args)))))
 
-(define-special-op :/ ((processor sqlite3-processor) args)
-  (in-parentheses processor
-    (intersperse processor " / " args)))
+(define-special-op :~ ((processor sqlite3-processor) args)
+  (destructuring-bind (arg) args
+    (in-parentheses processor
+      (raw-string processor "~")
+      (raw-string processor arg))))
 
-(define-special-op := ((processor sqlite3-processor) args)
-  (binary-op processor " = " args))
-
-(define-special-op :like ((processor sqlite3-processor) args)
-  (binary-op processor " LIKE " args))
-
-(define-special-op :<= ((processor sqlite3-processor) args)
-  (binary-op processor " <= " args))
-
-(define-special-op :>= ((processor sqlite3-processor) args)
-  (binary-op processor " >= " args))
-
-(define-special-op :set ((processor sqlite3-processor) args)
-  (raw-string processor "SET ")
-  (intersperse processor ", " args
-	       :key (lambda (processor pair)
-		      (intersperse processor " = " pair))))
+(define-special-op :not ((processor sqlite3-processor) args)
+  (destructuring-bind (arg) args
+    (in-parentheses processor
+      (raw-string processor " NOT ")
+      (raw-string processor arg))))
 
 (define-special-op :between ((processor sqlite3-processor) args)
   (destructuring-bind (var lower upper) args
@@ -69,10 +99,13 @@
     (intersperse processor " " (list var :between lower :and upper))
     (raw-string processor ")")))
 
-(define-special-op :and ((processor sqlite3-processor) args)
-  (raw-string processor "(")
-  (intersperse processor " AND " args)
-  (raw-string processor ")"))
+;; Syntactic ops
+
+(define-special-op :set ((processor sqlite3-processor) args)
+  (raw-string processor "SET ")
+  (intersperse processor ", " args
+	       :key (lambda (processor pair)
+		      (intersperse processor " = " pair))))
 
 (define-special-op :bind ((processor sqlite3-processor) args)
   (destructuring-bind (id) args
@@ -80,50 +113,7 @@
     (let ((*sql-identifier-quote* nil))
       (process-sql processor id))))
 
-(define-special-op :primary-key ((processor sqlite3-processor) args)
-  (raw-string processor "PRIMARY KEY (")
-  (intersperse processor ", " args)
-  (raw-string processor ")"))
-
-(define-sql-op :alter sqlite3-processor)
-
-(define-sql-op :analyze sqlite3-processor)
-
-(define-sql-op :attach sqlite3-processor)
-
-(define-sql-op :begin sqlite3-processor)
-
-(define-sql-op :commit sqlite3-processor)
-
-(define-sql-op :create sqlite3-processor)
-
-(define-sql-op :delete sqlite3-processor)
-
-(define-sql-op :detach sqlite3-processor)
-
-(define-sql-op :drop sqlite3-processor)
-
-(define-sql-op :end sqlite3-processor)
-
-(define-sql-op :explain sqlite3-processor)
-
-(define-sql-op :insert sqlite3-processor)
-
-(define-sql-op :pragma sqlite3-processor)
-
-(define-sql-op :reindex sqlite3-processor)
-
-(define-sql-op :release sqlite3-processor)
-
-(define-sql-op :rollback sqlite3-processor)
-
-(define-sql-op :savepoint sqlite3-processor)
-
-(define-sql-op :select sqlite3-processor)
-
-(define-sql-op :update sqlite3-processor)
-
-(define-sql-op :vacuum sqlite3-processor)
+;; Reader syntax
 
 (defun enable-bind-reader-syntax ()
   "Enables the reader syntax for host parameters in
@@ -138,6 +128,8 @@ can then be denoted by prepending a '$' to the symbol."
   "Disables the reader syntax for host parameters in
 prepared queries."
   (set-macro-character #\$ nil))
+
+;; SQL production
 
 (defmacro ssql (sexp)
   "Compiles an SQL sexp to lisp expressions which return the

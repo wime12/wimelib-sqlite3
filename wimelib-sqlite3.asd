@@ -5,12 +5,11 @@
   :description "Describe wimelib-sqlite3 here"
   :author "Wilfried Meindl <wilfried.meindl@gmail.com>"
   :license "Specify license here"
-  :depends-on (#:alexandria
+  :depends-on (#:wimelib-utilities
                #:wimelib-sqlite3-ffi
 	       #:closer-mop
 	       #:wimelib-sql)
   :components ((:file "package")
-	       (:file "utilities")
                (:file "ffi")
 	       (:file "sql")
 	       (:file "sqlite3")
