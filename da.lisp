@@ -1,12 +1,17 @@
 (in-package #:wimelib-sqlite3)
 
-;; TODO: references
 ;; TODO: default values
 
 (defclass da-class (standard-class)
   ((table-name :initarg :table-name :initform nil)
    (primary-key :initarg :primary-key :initform nil
-		:accessor da-class-primary-key))
+		:accessor da-class-primary-key)
+   (foreign-keys :initarg :foreign-keys :initform nil
+		 :accessor da-class-foreign-keys)
+   (unique :initarg :unique :initform nil
+	    :accessor da-class-unique)
+   (slot-column-mapping :initarg :slot-column-mapping
+			:accessor da-class-slot-column-mapping))
   (:documentation "The metaclass for database access objects.
 
 Classes of this metaclass accept two new class options: :TABLE-NAME and
@@ -16,24 +21,28 @@ database. The symbols following :PRIMARY-KEY designate the slot names
 of the class which together form the primary key of the database table.
 
 The slot definitions of database access classes accept the keywords
-:COLUMN-TYPE, :UNIQUE, :NOT-NULL and :COLUMN-NAME in addition to the
-standard keywords.
+:COLUMN-TYPE, :UNIQUE, :NOT-NULL, :COLUMN-NAME and :REFERENCE in addition
+to the standard keywords.
 
 The argument to :COLUMN-TYPE can be any valid SQL type specifier
 denoting the type affinity of the column in the database, T for
 no type affinity or NIL meaning the slot is not connected to a
 column in the database table. The default is T. It will also be
-set to T if any of :UNIQUE, :NOT-NULL or :COLUMN-NAME are not NIL and
-:COLUMN-TYPE was NIL in the slot definition.
+set to T if any of :UNIQUE, :NOT-NULL, :COLUMN-NAME or :REFERENCE
+are not NIL and :COLUMN-TYPE was NIL in the slot definition.
 
 The argument to :COLUMN-NAME, which must be a symbol, is converted to
 an SQL identifier to access the corresponding column in the database
 table.
 
-:UNIQUE and :NOT-NULL are only used for generating the database
+:UNIQUE, :NOT-NULL and :REFERENCE are only used for generating the database
 schema from the class definition. They denote if a column can contain
-only unqique values or if it must not contain null values, respectively.
-They do not impose any restrictions on the values in the slot."))
+only unqique values, if it must not contain null values or if it references
+a slot in another da-class, respectively. They do not impose any restrictions
+on the values in the slot.
+
+The argument to :REFERENCE is a list of two elements. The first element
+is a class name and the second one a slot name."))
 
 (defmethod validate-superclass ((class da-class) (super-class standard-class))
   t)
@@ -51,7 +60,7 @@ They do not impose any restrictions on the values in the slot."))
     ((class da-class) &rest initargs &key direct-superclasses)
   (declare (dynamic-extent initargs))
   (let ((da-object-class (find-class 'da-object)))
-    (if (some #'(lambda (c) (subtypep c da-object-class)) direct-superclasses)
+    (if (some #'(lambda (c) (typep c da-object-class)) direct-superclasses)
 	(call-next-method)
 	(apply #'call-next-method
 	       class
@@ -80,14 +89,12 @@ They do not impose any restrictions on the values in the slot."))
 (defclass da-standard-direct-slot-definition (standard-direct-slot-definition)
   ((column-name :initarg :column-name :reader da-slot-column-name)
    (column-type :initarg :column-type :reader da-slot-column-type)
-   (unique :initarg :unique :reader da-slot-unique)
    (not-null :initarg :not-null :reader da-slot-not-null)))
 
 (defclass da-standard-effective-slot-definition
     (standard-effective-slot-definition)
   ((column-name :initarg :column-name :reader da-slot-column-name)
    (column-type :initarg :column-type :reader da-slot-column-type)
-   (unique :initarg :unique :reader da-slot-unique)
    (not-null :initarg :not-null :reader da-slot-not-null)))
 
 (defmethod direct-slot-definition-class ((class da-class) &rest initargs)
@@ -102,21 +109,18 @@ They do not impose any restrictions on the values in the slot."))
     ((class da-class) slot-name direct-slot-definitions)
   (declare (optimize debug))
   (let ((slotd (call-next-method)))
-    (with-slots (column-type not-null unique column-name) slotd
+    (with-slots (column-type not-null column-name) slotd
       (let ((ct-slot (find-if (lambda (sd) (slot-boundp sd 'column-type))
 			      direct-slot-definitions))
 	    (nn-slot (find-if (lambda (sd) (slot-boundp sd 'not-null))
-			      direct-slot-definitions))
-	    (un-slot (find-if (lambda (sd) (slot-boundp sd 'unique))
 			      direct-slot-definitions)))
 	(let ((ct (if ct-slot (slot-value ct-slot 'column-type) t))
-	      (nn (if nn-slot (slot-value nn-slot 'not-null) nil))
-	      (un (if un-slot (slot-value un-slot 'unique) nil)))
-	  (setf column-type (or ct nn un (and (slot-boundp slotd 'column-name)
-					      (not (null column-name)))))
+	      (nn (if nn-slot (slot-value nn-slot 'not-null) nil)))
+	  (setf column-type (or ct nn
+				(and (slot-boundp slotd 'column-name)
+				     (not (null column-name)))))
 	  (if column-type
 	      (setf not-null nn
-		    unique un
 		    column-name (or (and (slot-boundp
                                           (car direct-slot-definitions)
                                           'column-name)
@@ -124,7 +128,6 @@ They do not impose any restrictions on the values in the slot."))
 				          (car direct-slot-definitions)))
 				    slot-name))
 	      (setf not-null nil
-		    unique nil
 		    column-name nil)))))
     slotd))
 
@@ -187,34 +190,78 @@ if a database access object is given.")
       (error "Primary key for class ~A: no slot~p ~{~A~^, ~}"
 	     (class-name class) (length deserted-primary-key-slots)
 	     deserted-primary-key-slots)))
+  (setf (da-class-slot-column-mapping class)
+	(mapcar #'(lambda (slotd)
+		    (cons (slot-definition-name slotd)
+			  (da-slot-column-name slotd)))
+		(persistent-slots class)))
   (funcall (compile nil `(lambda () ,@(make-defmethod-exps class)))))
 
 (defun da-class-table-name (da-class)
   (or (car (slot-value da-class 'table-name)) (class-name da-class)))
 
+(defgeneric da-class-column-name (class slot-name)
+  (:method ((class da-class) slot-name)
+    (ensure-finalized class)
+    (cdr (assoc slot-name (da-class-slot-column-mapping class))))
+  (:method ((class symbol) slot-name)
+    (da-class-column-name (find-class class) slot-name)))
+
 (defgeneric da-class-schema (class-designator)
   (:method ((class da-class))
     (ensure-finalized class)
     `(:create :table ,(da-class-table-name class)
-	      ,(nconc (mapcar #'column-definition-from-slot-definition
+	      ,(nconc (mapcar #'(lambda (slotd)
+				  (column-definition-from-slot-definition
+				   class slotd)) 
 		       (persistent-slots class))
-		      (primary-key-declaration class))))
+		      (primary-key-declaration class)
+		      (unique-declaration class)
+		      (foreign-key-declarations class))))
   (:method ((class-designator symbol))
     (da-class-schema (find-class class-designator))))
 
-(defun column-definition-from-slot-definition (slot-definition)
+(defun column-definition-from-slot-definition (class slot-definition)
   (when (da-slot-column-type slot-definition)
-    `(,(slot-definition-name slot-definition)
+    `(,(da-class-column-name class (slot-definition-name slot-definition))
        ,@(let ((column-type (da-slot-column-type slot-definition)))
 	      (cond ((eql column-type t) nil)
 		    (t (list column-type))))
-       ,@(when (da-slot-unique slot-definition) '(:unique))
        ,@(when (da-slot-not-null slot-definition) '(:not :null)))))
 
 (defun primary-key-declaration (class)
   (let ((primary-key (da-class-primary-key class)))
     (when primary-key
-      `((:primary-key ,@primary-key)))))
+      `((:splice :primary :key ,(mapcar #'(lambda (pk)
+					    (da-class-column-name class pk))
+					primary-key))))))
+
+(defun unique-declaration (class)
+  (let ((unique (da-class-unique class)))
+    (when unique
+      `((:splice :unique ,@(mapcar #'(lambda (un)
+				       (da-class-column-name class un))
+				   unique))))))
+
+;; TODO: FOREIGN-KEY-DECLARATIONS komplettieren
+
+(defun foreign-key-declarations (class)
+  (let ((foreign-keys (da-class-foreign-keys class)))
+    (when foreign-keys
+      (collecting
+	(do ((tail foreign-keys (cddr tail)))
+	    ((endp tail))
+	  (let* ((cols (mapcar (lambda (sn) (da-class-column-name class sn))
+			       (ensure-list (car tail))))
+		 (ref (ensure-list (cadr tail)))
+		 (ref-table (da-class-table-name (find-class (car ref))))
+		 (ref-columns (mapcar (lambda (sn) (da-class-column-name (car ref)
+									 sn))
+				      (cdr ref))))
+	    (collect `(:splice :foreign :key ,cols
+			       :references ,@(if (cdr ref)
+						 (list ref-table ref-columns)
+						 (list ref-table))))))))))
 
 (defgeneric insert-da (da)
   (:documentation "Inserts a dabase access object into the database.
