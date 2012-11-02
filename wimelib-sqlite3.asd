@@ -10,8 +10,6 @@
 	       #:closer-mop
 	       #:wimelib-sql)
   :components ((:file "package")
-	       (:file "sqlite3-lib")
-               (:file "ffi")
 	       (:file "sql")
 	       (:file "sqlite3")
 	       (:file "database")

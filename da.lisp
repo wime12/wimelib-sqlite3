@@ -426,3 +426,14 @@ Example
   (when all-columns
     `(setf ,@(mapcan (lambda (column) `((slot-value ,da ',column) ,column))
 		     all-columns))))
+
+;;; Foreign Key References
+
+(defun da-class-foreign-key-references (da-class)
+  (let ((foreign-keys (da-class-foreign-keys da-class)))
+    (collecting
+      (do ((ref (cdr foreign-keys) (cddr ref)))
+	  ((null ref))
+	(collect (if (listp (car ref))
+		     (caar ref)
+		     (car ref)))))))

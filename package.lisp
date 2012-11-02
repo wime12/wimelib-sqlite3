@@ -19,6 +19,7 @@
    column-values
    column-names
    exec
+   exec*
    do-rows
    do-query
    map-query
@@ -46,6 +47,7 @@
    disable-bind-reader-syntax
    da-class
    da-class-schema
+   da-class-table-name
    check-schema
    primary-key
    insert-da
@@ -54,4 +56,3 @@
    delete-da
    get-da
    select-das))
-

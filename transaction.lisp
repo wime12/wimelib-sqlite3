@@ -29,13 +29,13 @@ when the body ends. Two restarts for rolling back or committing
 the transaction are established in case any error occurs."
   `(progn
      (begin-transaction)
-     (restart-case (progn ,@body (end-transaction))
+     (restart-case (progn ,@body (commit-transaction))
        (rollback ()
 	 :report "Undo all changes and end the transaction."
 	 (rollback))
        (commit-transaction ()
 	 :report "End the transaction and keep all changes"
-	 (end-transaction)))))
+	 (commit-transaction)))))
 
 (defmacro with-savepoint ((savepoint) &body body)
   "Creates a savepoint which is released when the body ends.

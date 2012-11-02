@@ -7,4 +7,5 @@
   :license "Specify license here"
   :depends-on (#:cffi)
   :components ((:file "package-ffi")
+	       (:file "sqlite3-lib")
                (:file "ffi")))
